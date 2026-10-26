@@ -106,7 +106,15 @@ Write-Host "Mod copiado a: $modDst"
 if (Test-Path (Join-Path $sidecarDir "coop_net.ps1")) {
     Copy-Item -Force (Join-Path $sidecarDir "coop_net.ps1") $GameBin
     Copy-Item -Force (Join-Path $sidecarDir "run_sidecar.bat") $GameBin
-    Write-Host "Sidecar copiado a: $GameBin"
+    Write-Host "Sidecar PowerShell copiado a: $GameBin"
+}
+# El modo servidor (server:host:puerto) y el chat necesitan el sidecar Python.
+if (Test-Path (Join-Path $sidecarDir "coop_net.py")) {
+    Copy-Item -Force (Join-Path $sidecarDir "coop_net.py") $GameBin
+    if (Test-Path (Join-Path $sidecarDir "run_sidecar_server.bat")) {
+        Copy-Item -Force (Join-Path $sidecarDir "run_sidecar_server.bat") $GameBin
+    }
+    Write-Host "Sidecar Python + run_sidecar_server.bat copiados a: $GameBin"
 }
 
 # --- Habilitar en mods.txt ---
@@ -131,6 +139,12 @@ if (Test-Path $modsJson) {
 
 Write-Host ""
 Write-Host "LISTO. El sidecar se auto-lanza desde el juego (no hace falta terminal)."
-Write-Host "Para jugar:"
+Write-Host "Para jugar P2P:"
 Write-Host "  1) Lanza The Last Caretaker."
 Write-Host "  2) En el juego: F9, escribe la IP del otro jugador, clic en Conectar."
+Write-Host ""
+Write-Host "Para el servidor dedicado (server:host:puerto) o chat:"
+Write-Host "  - Instala Python 3 (marca 'Add Python to PATH')."
+Write-Host "  - En config.lua: autoStartSidecar = false."
+Write-Host "  - Corre: run_sidecar_server.bat `"$GameBin`""
+Write-Host "  - En el juego: F9 -> server:server.jeba.cc:8766"

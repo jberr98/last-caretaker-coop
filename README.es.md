@@ -175,7 +175,7 @@ comando de auto-lanzamiento de Linux.
 Usá el instalador del paquete:
 
 1. Descargá/extraé el paquete `LC_Coop-v<version>.zip` (el script de empaquetado
-   lo deja en `dist/`, por ejemplo `dist/LC_Coop-v0.2.0.zip`).
+   lo deja en `dist/`, por ejemplo `dist/LC_Coop-v0.2.1.zip`).
 2. Ejecutá `INSTALAR.bat` (o `windows/install_lc_coop.ps1`).
 3. Lanzá el juego.
 
@@ -185,6 +185,14 @@ O copiá `mods/LC_Coop` a
 
 El paquete incluye además el sidecar Python, los binarios del servidor Rust y
 el egg de Pelican.
+
+> **Windows + servidor dedicado (`server:host:puerto`):** el sidecar PowerShell
+> solo implementa P2P/relay. Para el modo servidor y el chat, instalá Python 3,
+> poné `autoStartSidecar = false` en
+> `...\ue4ss\Mods\LC_Coop\Scripts\config.lua` y ejecutá
+> `sidecar\run_sidecar_server.bat "C:\...\Voyage\Binaries\Win64"`. El
+> instalador copia `coop_net.py` y el lanzador a la carpeta del juego. Después
+> usá F9 con `server:host:puerto`.
 
 ## Inicio rápido
 

@@ -5,8 +5,9 @@
 QUÉ ES
   Mod de cooperativo para The Last Caretaker. Cada jugador ve
   al otro (ghost). Requiere UE4SS + este mod + el sidecar.
-  NO requiere instalar Python: el sidecar es un script de
-  PowerShell (ya viene en Windows).
+  Para P2P no hace falta Python: el sidecar PowerShell ya viene.
+  Para el servidor dedicado (server:host:puerto) y el chat SI
+  necesitas Python 3 (ver "MODO SERVIDOR").
 
 --------------------------------------------------------
 PASO 1 — UE4SS
@@ -37,6 +38,35 @@ PASO 3 — Jugar
      (Tailscale 100.x.y.z o LAN), y hacé clic en "Conectar".
   3. F9 cierra el menú.
   (Si no conectara, corré a mano: sidecar\run_sidecar.bat "<carpeta Win64>")
+
+--------------------------------------------------------
+MODO SERVIDOR (server:host:puerto) - requiere Python 3
+--------------------------------------------------------
+El sidecar PowerShell solo sirve para P2P/relay. Para el servidor
+dedicado (y para el chat) usa el sidecar Python:
+
+  1. Instala Python 3 desde https://www.python.org/downloads/windows/
+     y marca "Add Python to PATH".
+  2. Cierra el juego.
+  3. En ...\ue4ss\Mods\LC_Coop\Scripts\config.lua pone:
+         autoStartSidecar = false
+  4. Abri cmd en la carpeta del juego y corre:
+         run_sidecar_server.bat
+     (o desde la carpeta sidecar del paquete:
+         run_sidecar_server.bat "C:\...\Voyage\Binaries\Win64")
+  5. Lanza el juego. En F9 escribi:
+         server:TU_HOST:TU_PUERTO
+     y hace clic en Conectar.
+
+  - El sidecar Python tiene que decir:
+        [LC_Coop-net] modo servidor -> TU_HOST:TU_PUERTO
+        peer confirmado (ACK)
+  - Si dice "Address already in use", quedo el sidecar PowerShell
+    corriendo. Cerralo (powershell.exe con coop_net.ps1) y volve a
+    lanzar el Python.
+  - Si no conecta, proba:
+        python coop_net.py --probe TU_HOST --port TU_PUERTO --probe-timeout 5
+    y manda lc_net_status.txt + las ultimas lineas de lc_sidecar.log.
 
 --------------------------------------------------------
 QUÉ ESPERAR

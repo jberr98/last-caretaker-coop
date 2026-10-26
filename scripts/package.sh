@@ -2,7 +2,7 @@
 # Empaqueta el mod + sidecar + instaladores Windows en un .zip versionado.
 # (Usa python3 para el zip, así no requiere el binario `zip`.)
 #
-#   scripts/package.sh                 -> dist/LC_Coop-v0.2.0.zip
+#   scripts/package.sh                 -> dist/LC_Coop-v0.2.1.zip
 #   scripts/package.sh /ruta/out.zip   -> ruta explícita
 #
 # La versión se lee de VERSION (raíz del proyecto). El .zip queda en dist/
