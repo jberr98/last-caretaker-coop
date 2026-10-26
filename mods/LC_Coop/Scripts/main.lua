@@ -978,7 +978,9 @@ pcall(function()
             end
             local cls = StaticFindObject("/Script/Engine.LightComponent")
             local n = 0
-            for _, c in pairs(actor:K2_GetComponentsByClass(cls) or {}) do
+            local lights = nil
+            pcall(function() lights = actor:K2_GetComponentsByClass(cls) end)
+            for _, c in pairs(lights or {}) do
                 n = n + 1
                 local name, cname, intensity, vis = "?", "?", -1, false
                 pcall(function() name = c:GetFName():ToString() end)
