@@ -132,6 +132,10 @@ local function build_text()
                 st.server_players or "0", st.server_saved_players or "0",
                 st.server_saved_containers or "0", saveAge)
         end
+        lines[#lines + 1] = string.format(
+            "CHAT tx=%s rx=%s radio=%s srv=%s",
+            st.chat_tx or "0", st.chat_rx or "0",
+            st.chat_radius or "?", st.server_chat_radius or "0")
     else
         lines[#lines + 1] = "NET  sin lc_net_status.txt (sidecar no corriendo?)"
     end

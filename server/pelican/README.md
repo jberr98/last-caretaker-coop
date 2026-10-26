@@ -17,8 +17,8 @@ contenedores).
   `server/coop-server-rs` con musl y deja el binario estático.
 - Alternativa `LC_COOP_BINARY_URL` para usar un ELF ya compilado.
 - Save JSON con posiciones por área/dimensión, puertas y contenedores.
-- Variables para el nombre visible, timeout, frecuencia de STATE y frecuencia de
-  guardado.
+- Variables para el nombre visible, timeout, frecuencia de STATE, frecuencia de
+  guardado y radio del chat de proximidad.
 - Detección de arranque (`escuchando en`) y parada ordenada (`^SIGTERM`).
 
 ## Importar el egg
@@ -106,7 +106,12 @@ egg.
 | `TIMEOUT` | `30` | Segundos sin actividad para expirar un cliente |
 | `STATE_HZ` | `15` | Frecuencia del STATE a los clientes |
 | `SAVE_INTERVAL` | `1` | Cada cuántos segundos guardar si hubo cambios |
+| `CHAT_RADIUS` | `2500` | Radio del chat local en unidades UE (2500 = 25 m) |
 | `EXTRA_ARGS` | vacío | Argumentos extra para `lc-coop-server` |
+
+El chat viaja por el mismo puerto UDP. El servidor filtra los mensajes LOCAL por
+área/dimensión y `CHAT_RADIUS`; los GLOBAL llegan a todos los clientes. El chat
+no se guarda en `save.json`.
 
 ## Conectar los clientes
 

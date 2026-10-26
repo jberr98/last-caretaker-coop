@@ -1,8 +1,12 @@
-# Local/private notes (see AGENTS.md)
+# Local/private notes and credentials (see AGENTS.md)
 *.local.md
 PENDIENTE.local.md
+Pass ssh.txt
+*.password
+credentials.txt
 
 # Build artifacts and packages
+dist/
 *.zip
 server/coop-server-rs/target/
 server/relay-rs/target/
@@ -21,7 +25,11 @@ coords_out.txt
 coords_in.txt
 event_out.txt
 event_in.txt
+chat_out.txt
+chat_in.txt
 area_out.txt
+lc_chat_radius.txt
+lc_player_name.txt
 lc_peer.txt
 lc_client_id.txt
 lc_net_status.txt

@@ -4,7 +4,7 @@
         "version": "PLCN_v1",
         "update_url": "https://raw.githubusercontent.com/jberr98/last-caretaker-coop/main/server/pelican/egg-lc-coop-coordination-server.json"
     },
-    "exported_at": "2026-10-26T05:49:35+00:00",
+    "exported_at": "2026-10-26T21:06:04+00:00",
     "name": "LC_Coop Coordination Server",
     "author": "33329664+jberr98@users.noreply.github.com",
     "uuid": "4f6c1d2a-8b3e-4c7a-9d61-5e2b0a7c9f14",
@@ -21,7 +21,7 @@
         "Alpine (binario estático)": "ghcr.io/pelican-eggs/yolks:alpine"
     },
     "file_denylist": [],
-    "startup": "./lc-coop-server --port {{SERVER_PORT}} --save {{SAVE_FILE}} --name \"{{SERVER_NAME}}\" --timeout {{TIMEOUT}} --state-hz {{STATE_HZ}} --save-interval {{SAVE_INTERVAL}} {{EXTRA_ARGS}}",
+    "startup": "./lc-coop-server --port {{SERVER_PORT}} --save {{SAVE_FILE}} --name \"{{SERVER_NAME}}\" --timeout {{TIMEOUT}} --state-hz {{STATE_HZ}} --save-interval {{SAVE_INTERVAL}} --chat-radius {{CHAT_RADIUS}} {{EXTRA_ARGS}}",
     "config": {
         "files": "{}",
         "startup": "{\n    \"done\": \"escuchando en\"\n}",
@@ -123,6 +123,20 @@
         },
         {
             "sort": 7,
+            "name": "Radio del chat local",
+            "description": "Radio del chat de proximidad en unidades UE (1 unidad = 1 cm). 2500 = 25 m. El chat global no usa este valor.",
+            "env_variable": "CHAT_RADIUS",
+            "default_value": "2500",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": [
+                "required",
+                "integer",
+                "between:0,100000"
+            ]
+        },
+        {
+            "sort": 8,
             "name": "Argumentos extra",
             "description": "Argumentos adicionales para lc-coop-server (opcional).",
             "env_variable": "EXTRA_ARGS",

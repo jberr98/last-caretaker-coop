@@ -110,6 +110,7 @@ def build_egg(install_script: str) -> dict:
             "--timeout {{TIMEOUT}} "
             "--state-hz {{STATE_HZ}} "
             "--save-interval {{SAVE_INTERVAL}} "
+            "--chat-radius {{CHAT_RADIUS}} "
             "{{EXTRA_ARGS}}"
         ),
         "config": {
@@ -217,6 +218,19 @@ def build_egg(install_script: str) -> dict:
             },
             {
                 "sort": 7,
+                "name": "Radio del chat local",
+                "description": (
+                    "Radio del chat de proximidad en unidades UE (1 unidad = "
+                    "1 cm). 2500 = 25 m. El chat global no usa este valor."
+                ),
+                "env_variable": "CHAT_RADIUS",
+                "default_value": "2500",
+                "user_viewable": True,
+                "user_editable": True,
+                "rules": ["required", "integer", "between:0,100000"],
+            },
+            {
+                "sort": 8,
                 "name": "Argumentos extra",
                 "description": (
                     "Argumentos adicionales para lc-coop-server (opcional)."

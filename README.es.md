@@ -19,9 +19,9 @@ Es un proyecto personal, no está afiliado a los desarrolladores del juego. Ver
 [`PLAN.md`](PLAN.md) para las notas técnicas y el roadmap por fases.
 
 > **Estado:** funcionan la sincronización de posición/ghost, las puertas, el
-> aislamiento por área/dimensión, el menú in-game F9, el overlay de debug
-> Ctrl+F6, el servidor dedicado de coordinación con save JSON persistente y el
-> relay de respaldo. El egg de Pelican Panel descarga el instalador desde este
+> aislamiento por área/dimensión, el chat de proximidad/global, el menú in-game
+> F9, el overlay de debug Ctrl+F6, el servidor dedicado de coordinación con save
+> JSON persistente y el relay de respaldo. El egg de Pelican Panel descarga el instalador desde este
 > repositorio; el bootstrap remoto y el runtime se probaron. Aplicar snapshots
 > de contenedores en el cliente (`syncContainers`) sigue siendo experimental.
 > El cooperativo completo del mundo no está soportado — ver
@@ -38,6 +38,7 @@ Es un proyecto personal, no está afiliado a los desarrolladores del juego. Ver
 - [Estado de conexión (HELLO/ACK)](#estado-de-conexión-helloack)
 - [Tailscale y firewall](#tailscale-y-firewall)
 - [Overlay de debug (Ctrl+F6)](#overlay-de-debug-ctrlf6)
+- [Chat (proximidad y global)](#chat-proximidad-y-global)
 - [Pruebas en solitario](#pruebas-en-solitario)
 - [Configuración](#configuración)
 - [Servidor dedicado](#servidor-dedicado)
@@ -62,6 +63,7 @@ Es un proyecto personal, no está afiliado a los desarrolladores del juego. Ver
 | Aplicar snapshots de contenedores en el cliente | 🧪 experimental (`syncContainers`) |
 | Relay de respaldo si el UDP directo está bloqueado | ✅ |
 | Menú de conexión in-game (F9) | ✅ |
+| Chat de proximidad/global | ✅ |
 | Overlay de debug en vivo (Ctrl+F6) | ✅ |
 | Animaciones / sincronización de skeleton | ❌ |
 | Mundo completo, inventario, máquinas, misiones | ❌ |
@@ -75,10 +77,13 @@ Es un proyecto personal, no está afiliado a los desarrolladores del juego. Ver
 | **F8** | Deshabilitado. Simulaba que el peer agrega un ítem a un contenedor; en pausa por el tema del `ItemData`. |
 | **F9** | Abrir/cerrar el menú de conexión. |
 | **F11** | Conectar a la IP/host escrita en la caja de F9. |
-| **ESC** | Cerrar el menú F9. |
+| **Enter** | Abrir el chat local (proximidad); de nuevo para enviar. |
+| **Ctrl+Enter** | Abrir el chat global, o enviar el mensaje actual como global. |
+| **Tab** | Cambiar LOCAL/GLOBAL con el chat abierto. |
+| **ESC** | Cerrar el chat o el menú F9. |
 
 La alternativa por consola es `~` o F10: `lc_connect <IP>`, `lc_disconnect`,
-`lc_status`.
+`lc_status`, `lc_name <nombre>`.
 
 ## Cómo funciona
 
@@ -119,6 +124,10 @@ Cliente A ── UDP ──►  lc-coop-server  ◄── UDP ── Cliente B
   `VoyageDoorActor:SetDoorState`.
 - Solo se ven los jugadores de la **misma área/dimensión**. Al cambiar de área
   se elimina el ghost y se manda `PEER_OFFLINE`.
+- El **chat** usa el mismo token de área. Los mensajes LOCAL solo llegan a
+  jugadores de la misma área y dentro de `chatRadius`; GLOBAL llega a todos los
+  clientes del mismo servidor/relay. El texto viaja como un paquete JSON
+  `PKT_CHAT`; no se guarda en el save.
 
 > Los jugadores **no** comparten el mundo persistente (inventario, máquinas,
 > progreso de la historia, save). El mod sincroniza posición, puertas y
@@ -165,7 +174,8 @@ comando de auto-lanzamiento de Linux.
 
 Usá el instalador del paquete:
 
-1. Descargá/extraé `LC_Coop-package.zip`.
+1. Descargá/extraé el paquete `LC_Coop-v<version>.zip` (el script de empaquetado
+   lo deja en `dist/`, por ejemplo `dist/LC_Coop-v0.2.0.zip`).
 2. Ejecutá `INSTALAR.bat` (o `windows/install_lc_coop.ps1`).
 3. Lanzá el juego.
 
@@ -335,6 +345,48 @@ Se actualiza cada 1 segundo. En `config.lua`:
 **Evitá F1–F4**: KDE las usa para cambiar de escritorio virtual, por eso el
 default es F6.
 
+## Chat (proximidad y global)
+
+El mod tiene dos canales de texto:
+
+- **LOCAL (proximidad)**: solo lo reciben jugadores en la **misma
+  área/dimensión** y dentro de `chatRadius`. El default es **2500 unidades UE =
+  25 m** (1 unidad = 1 cm). Es una comprobación de distancia, no de línea de
+  visión: una pared **no** bloquea el mensaje si ambos están lo bastante cerca.
+- **GLOBAL**: lo reciben todos los clientes conectados al mismo servidor de
+  coordinación o relay, sin importar área ni distancia.
+
+Teclas:
+
+| Tecla | Acción |
+|---|---|
+| **Enter** | Abrir el chat local. Con el chat abierto, Enter envía. |
+| **Ctrl+Enter** | Abrir el chat global. Con el chat abierto, Ctrl+Enter envía como global. |
+| **Tab** | Cambiar LOCAL/GLOBAL con el chat abierto. |
+| **ESC** | Cerrar el chat. |
+
+Si llega un mensaje con el chat cerrado, queda en pantalla
+`chatToastSeconds` (default 8 s). El panel tiene botones **Canal**, **Enviar**
+y **Cerrar**, así que también se puede usar el mouse.
+
+El nombre visible es `--client-name` del sidecar, o `lc_player_name.txt` /
+`playerName` en `config.lua`. Se puede cambiar en el juego con:
+
+```text
+lc_name Javier
+```
+
+El sidecar lee `lc_chat_radius.txt` (lo escribe el mod) para P2P/relay. En
+**modo servidor** el radio lo decide el servidor con `--chat-radius` /
+`CHAT_RADIUS`; el valor se muestra en la línea de estado del chat y en el
+overlay Ctrl+F6.
+
+El chat es **texto UDP plano**, no está cifrado y **no se guarda**: al cerrar el
+juego o reiniciar el servidor se pierde el historial. Es solo texto (sin voz).
+En Windows, el modo `server:` y el chat necesitan el **sidecar Python**
+(`sidecar\run_sidecar_server.bat`); el sidecar PowerShell solo implementa
+P2P/relay.
+
 ## Pruebas en solitario
 
 No necesitás un segundo jugador para validar casi todo. `fake_peer.py` simula al
@@ -376,6 +428,11 @@ Editá `mods/LC_Coop/Scripts/config.lua` (o la copia instalada en
 | `syncDoors` | `true` | Sincronizar puertas (`false` = solo movimiento). |
 | `saveContainers` | `true` | Reportar snapshots de contenedores al servidor. |
 | `syncContainers` | `false` | Aplicar snapshots de contenedores del servidor en el cliente (experimental). |
+| `chatEnabled` | `true` | Activar el chat de proximidad/global. |
+| `chatRadius` | `2500` | Radio de proximidad en unidades UE (2500 = 25 m). |
+| `chatMaxLen` | `240` | Largo máximo del texto (bytes aproximados). |
+| `chatToastSeconds` | `8` | Cuánto quedan los mensajes en pantalla con el chat cerrado. |
+| `playerName` | `""` | Nombre visible; vacío = hostname del sidecar. |
 | `verbose` | `true` | Escribir logs en UE4SS. |
 | `debugOverlay` | `true` | Activar el overlay Ctrl+`debugKey`. |
 | `debugKey` | `"F6"` | Tecla F (con Ctrl) que abre/cierra el overlay. |
@@ -404,7 +461,7 @@ server target de UE5 o reimplementar el juego.
 ### Binario standalone (Linux x86_64)
 
 `server/bin/lc-coop-server-linux-x86_64` es un binario Rust/musl estático
-(~661 KB), sin dependencias de Python ni glibc:
+(~701 KB), sin dependencias de Python ni glibc:
 
 ```bash
 scp server/bin/lc-coop-server-linux-x86_64 usuario@servidor:/opt/lc-coop/
@@ -425,13 +482,14 @@ Opciones:
 --timeout S         segundos sin actividad para expirar un cliente (default: 30)
 --state-hz N        frecuencia de STATE a los clientes (default: 15)
 --save-interval S   segundos entre guardados si hubo cambios (default: 1)
+--chat-radius N     radio del chat local en unidades UE (default: 2500)
 --name STR          nombre visible del servidor
 --dump-save         imprimir el save y salir
 -h, --help / -V, --version
 ```
 
 Variables de entorno equivalentes: `PORT`, `SAVE`, `TIMEOUT`, `STATE_HZ`,
-`SAVE_INTERVAL`, `NAME`.
+`SAVE_INTERVAL`, `CHAT_RADIUS`, `NAME`.
 
 Hay un ejemplo de unidad systemd en
 [`server/lc-coop-server.service`](server/lc-coop-server.service).
@@ -490,6 +548,8 @@ El servidor guarda como mínimo posiciones, además de puertas y contenedores:
   el cliente (`syncContainers = true`) limpia y vuelve a agregar los ítems; es
   experimental y está desactivado por defecto.
 - **Puertas**: último estado por nombre; se manda a los clientes que entran.
+- **El chat no se guarda**: los mensajes son en vivo. El save no contiene
+  historial de chat.
 
 Esto **no es un save completo del juego**: no guarda máquinas, fluidos,
 misiones ni el inventario del jugador.
@@ -535,6 +595,8 @@ sidecar/               sidecar UDP en Python (Linux/Windows) + sidecar PowerShel
 server/                servidor de coordinación Rust, relay, egg de Pelican, docs
 scripts/               helpers de instalación/pruebas/empaquetado
 windows/               instalador de Windows
+dist/                  paquetes versionados (generados; ignorados por Git)
+VERSION                versión del paquete (la usa scripts/package.sh)
 reference/             clones de investigación locales (no se distribuyen; ignorados por Git)
 PLAN.md                notas técnicas y roadmap
 README.md              este archivo en inglés
@@ -565,7 +627,11 @@ distribuido.
   duplicados.
 - Cada update del juego puede requerir revisar nombres de clases/propiedades
   (`/Script/Voyage.…`).
-- Solo se soporta un ghost remoto (dos jugadores).
+- Solo se soporta un ghost remoto (dos jugadores). El chat puede mostrar
+  mensajes de más clientes, pero el ghost sigue limitado a uno.
+- El chat de proximidad es **por distancia**, no por oclusión: una pared no
+  bloquea el mensaje si ambos están dentro del radio. Es solo texto, no tiene
+  historial al cerrar el juego y no está cifrado (UDP plano).
 - El modo servidor en Windows requiere el sidecar Python; el sidecar PowerShell
   solo implementa P2P/relay.
 - El juego retail no tiene `VoyageServer`; un servidor real del mundo queda
@@ -581,10 +647,11 @@ distribuido.
 3. Probar `syncContainers=true` en un contenedor real y corregir casos de
    duplicación/limpieza.
 4. Probar el modo servidor del sidecar Python en Windows nativo.
-5. Probar visualmente el menú F9 en Windows.
-6. Importar el egg de Pelican en un panel real y verificar
+5. Probar el chat nuevo en el juego con dos clientes reales (LOCAL/GLOBAL, Tab, Esc).
+6. Probar visualmente el menú F9 en Windows.
+7. Importar el egg de Pelican en un panel real y verificar
    instalación/arranque/save tras una reinstalación.
-7. Largo plazo: evaluar un transporte en C++ (ver `PLAN.md`) y si un servidor
+8. Largo plazo: evaluar un transporte en C++ (ver `PLAN.md`) y si un servidor
    real del mundo es factible.
 
 ## Créditos

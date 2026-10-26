@@ -17,9 +17,10 @@ Python sidecar and, optionally, a dedicated coordination server.
 This is a personal project, not affiliated with the game's developers. See
 [`PLAN.md`](PLAN.md) for the technical notes and the phase-by-phase roadmap.
 
-> **Status:** position/ghost sync, door sync, area/dimension isolation, the
-> in-game F9 menu, the Ctrl+F6 debug overlay, the dedicated coordination server
-> with a persistent JSON save, and the relay fallback are working. The Pelican
+> **Status:** position/ghost sync, door sync, area/dimension isolation,
+> proximity/global text chat, the in-game F9 menu, the Ctrl+F6 debug overlay, the
+> dedicated coordination server with a persistent JSON save, and the relay
+> fallback are working. The Pelican
 > Panel egg pulls the installer from this repository; the remote bootstrap and
 > runtime were tested. Applying container snapshots on the client
 > (`syncContainers`) is still experimental. Full world co-op is not supported —
@@ -36,6 +37,7 @@ This is a personal project, not affiliated with the game's developers. See
 - [Connection status (HELLO/ACK)](#connection-status-helloack)
 - [Tailscale and firewall](#tailscale-and-firewall)
 - [Debug overlay (Ctrl+F6)](#debug-overlay-ctrlf6)
+- [Chat (proximity and global)](#chat-proximity-and-global)
 - [Solo testing](#solo-testing)
 - [Configuration](#configuration)
 - [Dedicated server](#dedicated-server)
@@ -60,6 +62,7 @@ This is a personal project, not affiliated with the game's developers. See
 | Applying container snapshots on the client | 🧪 experimental (`syncContainers`) |
 | Relay fallback when direct UDP is blocked | ✅ |
 | In-game connection menu (F9) | ✅ |
+| Proximity/global text chat | ✅ |
 | Live debug overlay (Ctrl+F6) | ✅ |
 | Player animations / skeleton sync | ❌ |
 | Full world, inventory, machines, missions | ❌ |
@@ -73,10 +76,13 @@ This is a personal project, not affiliated with the game's developers. See
 | **F8** | Disabled. It used to simulate a peer adding an item to a container; paused due to the `ItemData` issue. |
 | **F9** | Open/close the connection menu. |
 | **F11** | Connect to the IP/host written in the F9 box. |
-| **ESC** | Close the F9 menu. |
+| **Enter** | Open the local (proximity) chat; press again to send. |
+| **Ctrl+Enter** | Open global chat, or send the current message to global. |
+| **Tab** | Switch LOCAL/GLOBAL while the chat is open. |
+| **ESC** | Close the chat or the F9 menu. |
 
 The console alternative is `~` or F10: `lc_connect <IP>`, `lc_disconnect`,
-`lc_status`.
+`lc_status`, `lc_name <name>`.
 
 ## How it works
 
@@ -116,6 +122,10 @@ Client A ── UDP ──►  lc-coop-server  ◄── UDP ── Client B
 - Doors are synchronized through `VoyageDoorActor:SetDoorState` hooks.
 - Only players in the **same area/dimension** see each other. Changing area
   removes the ghost and sends `PEER_OFFLINE`.
+- **Chat** uses the same area token. LOCAL messages only reach players in the
+  same area and within `chatRadius`; GLOBAL messages reach every client on the
+  same server/relay. The text travels as a JSON `PKT_CHAT` packet; it is not
+  stored in the save.
 
 > Players do **not** share the persistent world (inventory, machines, story
 > progress, save game). The mod synchronizes position, doors, and container
@@ -162,7 +172,8 @@ Linux auto-start command.
 
 Use the packaged installer:
 
-1. Download/extract `LC_Coop-package.zip`.
+1. Download/extract the `LC_Coop-v<version>.zip` package (the build script
+   writes it to `dist/`, for example `dist/LC_Coop-v0.2.0.zip`).
 2. Run `INSTALAR.bat` (or `windows/install_lc_coop.ps1`).
 3. Launch the game.
 
@@ -333,6 +344,48 @@ It refreshes every second. In `config.lua`:
 **Avoid F1–F4**: KDE uses them to switch virtual desktops, which is why the
 default is F6.
 
+## Chat (proximity and global)
+
+The mod has two text channels:
+
+- **LOCAL (proximity)**: only players in the **same area/dimension** and within
+  `chatRadius` receive it. The default is **2500 UE units = 25 m** (1 unit = 1
+  cm). It is a distance check, not a line-of-sight check, so a wall does **not**
+  block the message if both players are close enough.
+- **GLOBAL**: every client connected to the same coordination server or relay
+  receives it, regardless of area or distance.
+
+Keys:
+
+| Key | Action |
+|---|---|
+| **Enter** | Open the local chat. While it is open, Enter sends. |
+| **Ctrl+Enter** | Open global chat. While it is open, Ctrl+Enter sends the message as global. |
+| **Tab** | Switch LOCAL/GLOBAL while the chat is open. |
+| **ESC** | Close the chat. |
+
+When a message arrives while the chat is closed, it stays on screen for
+`chatToastSeconds` (default 8 s). The chat panel has a **Canal** button, an
+**Enviar** button, and a **Cerrar** button, so the mouse also works.
+
+The visible name is the sidecar `--client-name`, or `lc_player_name.txt` /
+`playerName` in `config.lua`. Change it in game with:
+
+```text
+lc_name Javier
+```
+
+The sidecar reads `lc_chat_radius.txt` (written by the mod) for P2P/relay. In
+**server mode** the server decides the radius with `--chat-radius` /
+`CHAT_RADIUS`; the value is shown in the chat status line and the Ctrl+F6
+overlay.
+
+Chat is **plain UDP text**, not encrypted, and is **not saved**: closing the
+game or restarting the server clears the history. It is text only (no voice).
+On Windows, `server:` mode and chat need the **Python sidecar**
+(`sidecar\run_sidecar_server.bat`); the PowerShell sidecar only implements
+P2P/relay.
+
 ## Solo testing
 
 You do not need a second player to validate most of the mod. `fake_peer.py`
@@ -374,6 +427,11 @@ Edit `mods/LC_Coop/Scripts/config.lua` (or the installed copy in
 | `syncDoors` | `true` | Synchronize doors (`false` = movement only). |
 | `saveContainers` | `true` | Report container snapshots to the server. |
 | `syncContainers` | `false` | Apply server container snapshots on the client (experimental). |
+| `chatEnabled` | `true` | Enable proximity/global chat. |
+| `chatRadius` | `2500` | Proximity radius in UE units (2500 = 25 m). |
+| `chatMaxLen` | `240` | Maximum chat text length (approximate bytes). |
+| `chatToastSeconds` | `8` | How long incoming messages stay on screen when the chat is closed. |
+| `playerName` | `""` | Visible chat name; empty = sidecar hostname. |
 | `verbose` | `true` | Write logs to UE4SS. |
 | `debugOverlay` | `true` | Enable the Ctrl+`debugKey` overlay. |
 | `debugKey` | `"F6"` | F-key (with Ctrl) that toggles the overlay. |
@@ -402,7 +460,7 @@ target or a reimplementation of the game.
 ### Standalone binary (Linux x86_64)
 
 `server/bin/lc-coop-server-linux-x86_64` is a static Rust/musl binary
-(~661 KB) with no Python or glibc dependency:
+(~701 KB) with no Python or glibc dependency:
 
 ```bash
 scp server/bin/lc-coop-server-linux-x86_64 user@server:/opt/lc-coop/
@@ -423,13 +481,14 @@ Options:
 --timeout S         seconds without activity before a client expires (default: 30)
 --state-hz N        STATE frequency sent to clients (default: 15)
 --save-interval S   seconds between saves when dirty (default: 1)
+--chat-radius N     proximity chat radius in UE units (default: 2500)
 --name STR          server display name
 --dump-save         print the save and exit
 -h, --help / -V, --version
 ```
 
 Environment variable equivalents: `PORT`, `SAVE`, `TIMEOUT`, `STATE_HZ`,
-`SAVE_INTERVAL`, `NAME`.
+`SAVE_INTERVAL`, `CHAT_RADIUS`, `NAME`.
 
 A systemd unit example is included at
 [`server/lc-coop-server.service`](server/lc-coop-server.service).
@@ -486,6 +545,8 @@ The server stores at least positions, plus doors and containers:
   (`syncContainers = true`) clears and re-adds items; it is experimental and
   disabled by default.
 - **Doors**: last state per name; sent to clients that join.
+- **Chat is not persisted**: messages are live only. The save does not contain a
+  chat history.
 
 This is **not a full game save**: it does not store machines, fluids, missions,
 or the player's inventory.
@@ -530,6 +591,8 @@ sidecar/               Python UDP sidecar (Linux/Windows) + PowerShell legacy si
 server/                Rust coordination server, relay, Pelican egg, docs
 scripts/               install/test/package helpers
 windows/               Windows installer
+dist/                  versioned packages (generated, gitignored)
+VERSION                package version (used by scripts/package.sh)
 reference/             local research clones (not distributed; gitignored)
 PLAN.md                technical notes and roadmap
 README.md              this file (English)
@@ -555,7 +618,11 @@ is intentionally ignored by Git and is **not** part of the distributed mod.
   area and the ghost remains visible.
 - Door identification by actor name can fail if there are duplicates.
 - Game updates may require revisiting class/property names (`/Script/Voyage.…`).
-- Only one remote ghost is supported (two players).
+- Only one remote ghost is supported (two players). Chat can carry messages
+  from more clients, but the ghost is still limited to one.
+- Proximity chat is **distance-based**, not occlusion-based: a wall does not
+  block a message if both players are within the radius. It is text only, has no
+  history after closing the game, and is not encrypted (plain UDP).
 - Windows server mode requires the Python sidecar; the PowerShell sidecar only
   implements P2P/relay.
 - The retail game has no `VoyageServer`; a true world server is out of scope
@@ -570,10 +637,11 @@ is intentionally ignored by Git and is **not** part of the distributed mod.
 3. Test `syncContainers=true` on a real container and fix duplication/clear
    edge cases.
 4. Test the Python sidecar server mode on native Windows.
-5. Test the F9 menu visually on Windows.
-6. Import the Pelican egg in a real panel and verify install/start/save across a
+5. Test the new chat UI in-game with two real clients (LOCAL/GLOBAL, Tab, Esc).
+6. Test the F9 menu visually on Windows.
+7. Import the Pelican egg in a real panel and verify install/start/save across a
    reinstall.
-7. Long term: evaluate a C++ transport (see `PLAN.md`) and whether a true world
+8. Long term: evaluate a C++ transport (see `PLAN.md`) and whether a true world
    server is feasible.
 
 ## Credits

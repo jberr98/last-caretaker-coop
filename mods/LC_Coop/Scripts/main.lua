@@ -21,6 +21,25 @@ end
 -- Limpiar estado IPC viejo al cargar (evita un ghost "fantasma" tras reiniciar).
 pcall(function() local f = io.open(config.coordsIn, "w"); if f then f:close() end end)
 pcall(function() local f = io.open(config.eventIn, "w"); if f then f:close() end end)
+pcall(function() local f = io.open(config.chatIn or "chat_in.txt", "w"); if f then f:close() end end)
+pcall(function() local f = io.open(config.chatOut or "chat_out.txt", "w"); if f then f:close() end end)
+
+-- Configuración que lee el sidecar al arrancar (radio del chat y nombre).
+pcall(function()
+    local r = tonumber(config.chatRadius) or 2500
+    if r < 0 then r = 0 end
+    if r > 100000 then r = 100000 end
+    local f = io.open("lc_chat_radius.txt", "w")
+    if f then f:write(string.format("%.0f\n", r)); f:close() end
+
+    local name = tostring(config.playerName or "")
+    name = name:gsub("[;\r\n\t]", " ")
+    name = name:gsub("^%s+", ""):gsub("%s+$", ""):sub(1, 32)
+    if name ~= "" then
+        local g = io.open("lc_player_name.txt", "w")
+        if g then g:write(name .. "\n"); g:close() end
+    end
+end)
 
 -- Detectar si corremos bajo Proton/Wine (Linux) o Windows nativo.
 -- Bajo Proton, WINEPREFIX/STEAM_COMPAT_DATA_PATH están definidos y Wine mapea
@@ -60,6 +79,7 @@ local lastMoveLogAt = 0
 local peerSim = false
 local peerSimAngle = 0
 local connectUI = nil
+local chatUI = nil
 local debugOverlay = nil
 local currentArea = "?"
 local pendingLocal = nil
@@ -492,6 +512,7 @@ LoopAsync(config.intervalMs, function()
         end
         if #events > 0 then applyIncomingEvents(events) end
         if connectUI then pcall(function() connectUI.poll() end) end
+        if chatUI then pcall(function() chatUI.poll() end) end
         if debugOverlay then pcall(function() debugOverlay.poll() end) end
         if now() - lastDebugAt >= 5 then
             lastDebugAt = now()
@@ -870,12 +891,35 @@ pcall(function()
                     st.server_saved_players or "0", st.server_saved_containers or "0",
                     st.local_area or "?"))
             end
+            log(string.format(
+                "chat: tx=%s rx=%s radio=%s (servidor=%s)",
+                st.chat_tx or "0", st.chat_rx or "0", st.chat_radius or "?",
+                st.server_chat_radius or "-"))
         else
             log("sidecar sin estado (lc_net_status.txt no existe)")
         end
         return true
     end)
-    log("comandos in-game: lc_connect <IP> | lc_disconnect | lc_status")
+
+    RegisterConsoleCommandHandler("lc_name", function(cmd, params, ar)
+        local name = table.concat(params or {}, " ")
+        name = name:gsub("[;\r\n\t]", " ")
+        name = name:gsub("^%s+", ""):gsub("%s+$", ""):sub(1, 32)
+        if name == "" then
+            log("uso: lc_name <nombre>")
+            return true
+        end
+        local f = io.open("lc_player_name.txt", "w")
+        if f then
+            f:write(name .. "\n")
+            f:close()
+            log("nombre de chat: " .. name)
+        else
+            log("no pude escribir lc_player_name.txt")
+        end
+        return true
+    end)
+    log("comandos in-game: lc_connect <IP> | lc_disconnect | lc_status | lc_name <nombre>")
 end)
 
 -- =====================================================================
@@ -884,11 +928,42 @@ end)
 pcall(function()
     local ui = require("connect_ui")
     connectUI = ui
-    RegisterKeyBind(Key.F9, function() pcall(function() ui.toggle() end) end)
+    RegisterKeyBind(Key.F9, function()
+        if chatUI then pcall(function() chatUI.close(false) end) end
+        pcall(function() ui.toggle() end)
+    end)
     RegisterKeyBind(Key.F11, function() pcall(function() ui.connect_from_box() end) end)
     RegisterKeyBind(Key.ESCAPE, function() pcall(function() ui.close() end) end)
     log("menú in-game: F9 = abrir/cerrar, F11 o botón = conectar, ESC = cerrar")
 end)
+
+-- =====================================================================
+-- Chat de proximidad/global: Enter local, Ctrl+Enter global, Tab canal.
+-- =====================================================================
+if config.chatEnabled ~= false then
+    pcall(function()
+        local chat = require("chat_ui")
+        chatUI = chat
+        local function enter_chat(global)
+            if connectUI and connectUI.is_open() then return end
+            pcall(function() chat.on_enter(global) end)
+        end
+        RegisterKeyBind(Key.RETURN, function() enter_chat(false) end)
+        RegisterKeyBind(Key.RETURN, { ModifierKey.CONTROL }, function()
+            enter_chat(true)
+        end)
+        RegisterKeyBind(Key.TAB, function()
+            if connectUI and connectUI.is_open() then return end
+            if chat.is_open() then
+                pcall(function() chat.toggle_mode() end)
+            end
+        end)
+        RegisterKeyBind(Key.ESCAPE, function()
+            pcall(function() chat.close(false) end)
+        end)
+        log("chat: Enter = local, Ctrl+Enter = global, Tab = canal, Esc = cerrar")
+    end)
+end
 
 -- Overlay de debug en vivo: Ctrl + debugKey (F6 por defecto; F1-F4 los usa KDE).
 if config.debugOverlay ~= false then

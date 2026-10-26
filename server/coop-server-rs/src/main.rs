@@ -16,7 +16,7 @@
 
 use serde::{Deserialize, Serialize};
 use socket2::{Domain, Protocol, Socket, Type};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::fs;
 use std::io::{self, ErrorKind};
@@ -34,6 +34,12 @@ const PKT_HELLO: u8 = 3;
 const PKT_ACK: u8 = 4;
 const PKT_STATE: u8 = 6;
 const PKT_POS_AREA: u8 = 7;
+const PKT_CHAT: u8 = 8;
+
+const DEFAULT_CHAT_RADIUS: f32 = 2500.0;
+const CHAT_MAX_CHARS: usize = 240;
+const CHAT_RATE_WINDOW: Duration = Duration::from_secs(5);
+const CHAT_RATE_MAX: u32 = 10;
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 struct SavedPos {
@@ -77,6 +83,31 @@ struct SavedContainer {
     items: HashMap<String, i32>,
     #[serde(default)]
     last_seen: u64,
+}
+
+#[derive(Deserialize, Default)]
+struct ChatIn {
+    #[serde(default)]
+    scope: String,
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    msg_id: String,
+}
+
+#[derive(Serialize)]
+struct ChatOut {
+    v: u8,
+    scope: String,
+    id: String,
+    name: String,
+    area: String,
+    x: f32,
+    y: f32,
+    z: f32,
+    text: String,
+    ts: u64,
+    msg_id: String,
 }
 
 fn default_version() -> u32 {
@@ -133,6 +164,7 @@ struct StateOut<'a> {
     saved_players: usize,
     saved_containers: usize,
     saved_at: u64,
+    chat_radius: f32,
 }
 
 struct Client {
@@ -140,6 +172,7 @@ struct Client {
     name: String,
     area: String,
     last_seen: Instant,
+    chat_times: VecDeque<Instant>,
 }
 
 struct Config {
@@ -149,6 +182,7 @@ struct Config {
     state_interval: Duration,
     save_interval: Duration,
     name: String,
+    chat_radius: f32,
     dump_save: bool,
 }
 
@@ -190,15 +224,53 @@ fn fmt_addr(addr: &SocketAddr) -> String {
 }
 
 fn sanitize(s: &str, max: usize) -> String {
-    let mut out: String = s
-        .chars()
-        .filter(|c| *c != ';' && *c != '\r' && *c != '\n')
-        .collect();
-    out = out.trim().to_string();
-    if out.len() > max {
-        out.truncate(max);
+    let mut out = String::new();
+    for c in s.chars() {
+        if c == ';' || c == '\r' || c == '\n' || c == '\t' {
+            continue;
+        }
+        if out.len() + c.len_utf8() > max {
+            break;
+        }
+        out.push(c);
+    }
+    out.trim().to_string()
+}
+
+/// Texto de chat: conserva `;` y acentos, pero quita controles/saltos de línea.
+fn sanitize_chat(s: &str, max: usize) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        let c = if c == '\r' || c == '\n' || c == '\t' || c.is_control() {
+            ' '
+        } else {
+            c
+        };
+        if out.len() + c.len_utf8() > max {
+            break;
+        }
+        out.push(c);
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn short_text(s: &str, max: usize) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        if out.chars().count() >= max {
+            out.push('…');
+            break;
+        }
+        out.push(c);
     }
     out
+}
+
+fn normalize_scope(raw: &str) -> &'static str {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "global" | "g" | "all" | "world" => "global",
+        _ => "local",
+    }
 }
 
 fn usage(program: &str) {
@@ -210,6 +282,7 @@ fn usage(program: &str) {
     println!("  --state-hz N        frecuencia de STATE (default: 15)");
     println!("  --save-interval S   cada cuántos segundos guardar (default: 1)");
     println!("  --name STR          nombre visible del servidor (default: {})", "LC_Coop Server");
+    println!("  --chat-radius N     radio del chat local en unidades UE (default: 2500)");
     println!("  --dump-save         imprime el save y sale");
     println!("  -h, --help          esta ayuda");
     println!("  -V, --version       version");
@@ -239,6 +312,12 @@ fn parse_args() -> Config {
     let mut state_hz = clamp_env_u64("STATE_HZ", 15, 1, 60);
     let mut save_interval_secs = clamp_env_u64("SAVE_INTERVAL", 1, 1, 60);
     let mut name = env::var("NAME").unwrap_or_else(|_| "LC_Coop Server".to_string());
+    let mut chat_radius = env::var("CHAT_RADIUS")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|v| v.is_finite())
+        .unwrap_or(DEFAULT_CHAT_RADIUS)
+        .clamp(0.0, 100_000.0);
     let mut dump_save = false;
 
     let mut args = env::args().skip(1);
@@ -305,6 +384,21 @@ fn parse_args() -> Config {
                     process::exit(2);
                 });
             }
+            "--chat-radius" => {
+                let raw = args.next().unwrap_or_else(|| {
+                    eprintln!("falta valor para --chat-radius");
+                    process::exit(2);
+                });
+                chat_radius = raw
+                    .parse::<f32>()
+                    .ok()
+                    .filter(|v| v.is_finite())
+                    .unwrap_or_else(|| {
+                        eprintln!("valor invalido para --chat-radius: {raw}");
+                        process::exit(2);
+                    })
+                    .clamp(0.0, 100_000.0);
+            }
             other => match other.parse::<u16>() {
                 Ok(p) => port = p,
                 Err(_) => {
@@ -332,6 +426,7 @@ fn parse_args() -> Config {
         state_interval: Duration::from_millis((1000 / state_hz).max(10)),
         save_interval: Duration::from_secs(save_interval_secs),
         name,
+        chat_radius,
         dump_save,
     }
 }
@@ -571,6 +666,24 @@ fn parse_container_event(text: &str) -> Option<(String, ContainerOp)> {
     }
 }
 
+fn parse_chat(data: &[u8]) -> Option<ChatIn> {
+    if data.len() < 3 || data[0] != PKT_CHAT {
+        return None;
+    }
+    let chat: ChatIn = serde_json::from_slice(&data[1..]).ok()?;
+    if chat.text.trim().is_empty() {
+        return None;
+    }
+    Some(chat)
+}
+
+fn distance_to(pos: &SavedPos, x: f32, y: f32, z: f32) -> f32 {
+    let dx = pos.x - x;
+    let dy = pos.y - y;
+    let dz = pos.z - z;
+    (dx * dx + dy * dy + dz * dz).sqrt()
+}
+
 struct PendingContainer {
     area: String,
     items: HashMap<String, i32>,
@@ -615,6 +728,7 @@ fn state_for<'a>(
     clients: &HashMap<SocketAddr, Client>,
     save: &'a SaveFile,
     recipient_id: &str,
+    chat_radius: f32,
 ) -> StateOut<'a> {
     let now = Instant::now();
     let mut players = Vec::new();
@@ -649,6 +763,7 @@ fn state_for<'a>(
         saved_players: save.players.len(),
         saved_containers: save.containers.len(),
         saved_at: save.updated_at,
+        chat_radius,
     }
 }
 
@@ -659,8 +774,9 @@ fn send_state_to(
     save: &SaveFile,
     addr: SocketAddr,
     client_id: &str,
+    chat_radius: f32,
 ) {
-    let state = state_for(server, clients, save, client_id);
+    let state = state_for(server, clients, save, client_id, chat_radius);
     let json = match serde_json::to_vec(&state) {
         Ok(v) => v,
         Err(e) => {
@@ -679,6 +795,110 @@ fn send_state_to(
     pkt.push(PKT_STATE);
     pkt.extend_from_slice(&json);
     let _ = socket.send_to(&pkt, addr);
+}
+
+fn broadcast_chat(
+    socket: &UdpSocket,
+    clients: &HashMap<SocketAddr, Client>,
+    save: &SaveFile,
+    sender_addr: SocketAddr,
+    sender_id: &str,
+    chat: &ChatIn,
+    radius: f32,
+) -> usize {
+    let sender = match clients.get(&sender_addr) {
+        Some(c) => c,
+        None => return 0,
+    };
+    let sender_name = sender.name.clone();
+    let sender_area = sender.area.clone();
+    let scope = normalize_scope(&chat.scope);
+    let text = sanitize_chat(&chat.text, CHAT_MAX_CHARS);
+    if text.is_empty() {
+        return 0;
+    }
+
+    let sender_pos = save
+        .players
+        .get(sender_id)
+        .and_then(|p| p.positions.get(&sender_area))
+        .cloned();
+    if scope == "local"
+        && (sender_area.is_empty() || sender_area == "?" || sender_pos.is_none())
+    {
+        return 0;
+    }
+    let (sx, sy, sz) = sender_pos
+        .as_ref()
+        .map(|p| (p.x, p.y, p.z))
+        .unwrap_or((0.0, 0.0, 0.0));
+
+    let mut recipients = Vec::new();
+    for (addr, c) in clients.iter() {
+        if c.id == sender_id {
+            continue;
+        }
+        if scope == "local" {
+            if c.area.is_empty() || c.area == "?" || c.area != sender_area {
+                continue;
+            }
+            let pos = match save
+                .players
+                .get(&c.id)
+                .and_then(|p| p.positions.get(&c.area))
+            {
+                Some(p) => p,
+                None => continue,
+            };
+            if distance_to(pos, sx, sy, sz) > radius {
+                continue;
+            }
+        }
+        recipients.push(*addr);
+    }
+
+    let msg_id = {
+        let given = sanitize(&chat.msg_id, 64);
+        if given.is_empty() {
+            format!("{}:{}:{}", sender_id, now_epoch(), recipients.len())
+        } else {
+            given
+        }
+    };
+    let out = ChatOut {
+        v: 1,
+        scope: scope.to_string(),
+        id: sender_id.to_string(),
+        name: sender_name.clone(),
+        area: sender_area.clone(),
+        x: sx,
+        y: sy,
+        z: sz,
+        text: text.clone(),
+        ts: now_epoch(),
+        msg_id,
+    };
+    let json = match serde_json::to_vec(&out) {
+        Ok(v) => v,
+        Err(e) => {
+            log(&format!("no pude serializar chat: {e}"));
+            return 0;
+        }
+    };
+    let mut pkt = Vec::with_capacity(json.len() + 1);
+    pkt.push(PKT_CHAT);
+    pkt.extend_from_slice(&json);
+    for addr in &recipients {
+        let _ = socket.send_to(&pkt, addr);
+    }
+    log(&format!(
+        "chat[{}] {}: {} ({} destinatarios)",
+        scope,
+        sender_name,
+        short_text(&text, 80),
+        recipients.len()
+    ));
+    recipients.len()
 }
 
 fn send_ack(socket: &UdpSocket, server_name: &str, addr: SocketAddr, client_id: &str) {
@@ -750,11 +970,12 @@ fn main() {
     let _ = socket.set_read_timeout(Some(Duration::from_millis(5)));
 
     log(&format!(
-        "escuchando en :{} ({}) name={} save={}",
+        "escuchando en :{} ({}) name={} save={} chat_radius={:.0}",
         config.port,
         if dual { "IPv4+IPv6" } else { "IPv4" },
         config.name,
-        config.save_path.display()
+        config.save_path.display(),
+        config.chat_radius
     ));
 
     let mut save = load_save(&config.save_path);
@@ -810,6 +1031,10 @@ fn main() {
                     };
                     // Si el mismo ID cambió de dirección, sacar la vieja.
                     clients.retain(|a, c| *a == addr || c.id != id);
+                    let chat_times = clients
+                        .get(&addr)
+                        .map(|c| c.chat_times.clone())
+                        .unwrap_or_default();
                     clients.insert(
                         addr,
                         Client {
@@ -817,12 +1042,13 @@ fn main() {
                             name: name.clone(),
                             area: area.clone(),
                             last_seen: now,
+                            chat_times,
                         },
                     );
                     dirty = true;
 
                     send_ack(&socket, &config.name, addr, &id);
-                    send_state_to(&socket, &config.name, &clients, &save, addr, &id);
+                    send_state_to(&socket, &config.name, &clients, &save, addr, &id, config.chat_radius);
                     if !existed {
                         send_container_snapshots(&socket, addr, &area, &save);
                         log(&format!(
@@ -968,6 +1194,39 @@ fn main() {
                             }
                         }
                     }
+                    PKT_CHAT => {
+                        if let Some(chat) = parse_chat(&buf[..n]) {
+                            let allowed = if let Some(c) = clients.get_mut(&addr) {
+                                c.chat_times.retain(|t| {
+                                    now.saturating_duration_since(*t) < CHAT_RATE_WINDOW
+                                });
+                                if c.chat_times.len() >= CHAT_RATE_MAX as usize {
+                                    false
+                                } else {
+                                    c.chat_times.push_back(now);
+                                    true
+                                }
+                            } else {
+                                false
+                            };
+                            if allowed {
+                                broadcast_chat(
+                                    &socket,
+                                    &clients,
+                                    &save,
+                                    addr,
+                                    &cid,
+                                    &chat,
+                                    config.chat_radius,
+                                );
+                            } else {
+                                log(&format!(
+                                    "chat: limite de frecuencia para {}",
+                                    fmt_addr(&addr)
+                                ));
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -991,7 +1250,7 @@ fn main() {
                 .map(|(addr, c)| (*addr, c.id.clone()))
                 .collect();
             for (addr, id) in recipients {
-                send_state_to(&socket, &config.name, &clients, &save, addr, &id);
+                send_state_to(&socket, &config.name, &clients, &save, addr, &id, config.chat_radius);
             }
             last_state = now;
         }

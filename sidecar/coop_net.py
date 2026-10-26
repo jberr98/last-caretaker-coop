@@ -24,6 +24,7 @@ El HELLO/ACK confirma que el otro cliente está escuchando y escribe
 """
 
 import argparse
+import collections
 import json
 import os
 import re
@@ -41,6 +42,13 @@ PKT_HELLO = 3
 PKT_ACK = 4
 PKT_STATE = 6
 PKT_POS_AREA = 7
+PKT_CHAT = 8
+
+CHAT_MAX_CHARS = 240
+CHAT_RATE_MAX = 10
+CHAT_RATE_WINDOW = 5.0
+CHAT_STALE_SECONDS = 15.0
+DEFAULT_CHAT_RADIUS = 2500.0
 POS_FMT = "<BffffI"
 POS_SIZE = struct.calcsize(POS_FMT)
 EVT_HDR = struct.Struct("<B")
@@ -94,8 +102,8 @@ def truncate(path):
 
 
 def sanitize_name(name):
-    """Nombre corto y seguro para el handshake (sin ; ni saltos de línea)."""
-    name = re.sub(r"[;\r\n]", "", name or "")
+    """Nombre corto y seguro para el handshake y el chat (sin ; ni controles)."""
+    name = re.sub(r"[;\t\r\n\x00-\x1f\x7f]", "", name or "")
     return (name.strip() or "lc-client")[:32]
 
 
@@ -103,6 +111,36 @@ def clean_area(raw):
     """Token de área/dimensión (sin comas/; para no romper los formatos)."""
     s = re.sub(r"[^0-9A-Za-z_.:/-]", "_", (raw or "").strip())
     return (s[:40] or "?")
+
+
+def clean_scope(raw):
+    """Canal de chat: global o local (proximidad)."""
+    s = (raw or "").strip().lower()
+    return "global" if s in ("global", "g", "all", "world") else "local"
+
+
+def sanitize_chat(text, max_len=CHAT_MAX_CHARS):
+    """Texto de chat de una línea, sin controles, recortado por caracteres."""
+    text = re.sub(r"[\r\n\t]+", " ", text or "")
+    text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
+    text = re.sub(r" {2,}", " ", text).strip()
+    return text[:max_len]
+
+
+def parse_chat_out(line):
+    """Línea de chat_out.txt: scope<TAB>ts<TAB>texto."""
+    parts = line.split("\t", 2)
+    if len(parts) < 3:
+        return None
+    scope = clean_scope(parts[0])
+    try:
+        ts = int(float(parts[1]))
+    except (TypeError, ValueError):
+        ts = int(time.time())
+    text = sanitize_chat(parts[2])
+    if not text:
+        return None
+    return scope, ts, text
 
 
 def load_client_id(directory):
@@ -279,7 +317,8 @@ def resolve_addrs(host, port):
 
 class CoopNet:
     def __init__(self, peer, port, listen_port, directory, rate_hz, peer_file=None,
-                 watch_game=False, client_name=None):
+                 watch_game=False, client_name=None,
+                 chat_radius=DEFAULT_CHAT_RADIUS):
         self.watch_game = watch_game
         self.port = port
         self.peer_file = os.path.join(directory, peer_file) if peer_file else None
@@ -294,11 +333,38 @@ class CoopNet:
         self.coords_in = os.path.join(directory, "coords_in.txt")
         self.event_out = os.path.join(directory, "event_out.txt")
         self.event_in = os.path.join(directory, "event_in.txt")
+        self.chat_out = os.path.join(directory, "chat_out.txt")
+        self.chat_in = os.path.join(directory, "chat_in.txt")
+        self.chat_radius_path = os.path.join(directory, "lc_chat_radius.txt")
+        self.player_name_path = os.path.join(directory, "lc_player_name.txt")
         self.status_path = os.path.join(directory, "lc_net_status.txt")
         self.area_path = os.path.join(directory, "area_out.txt")
         self.client_id = load_client_id(directory)
-        self.client_name = sanitize_name(client_name or socket.gethostname())
+        self.allow_name_file = client_name is None
+        name_from_file = sanitize_name(read_text(self.player_name_path).strip())
+        self.client_name = sanitize_name(
+            client_name
+            or (name_from_file if self.allow_name_file else "")
+            or socket.gethostname())
         self.local_area = clean_area(read_text(self.area_path).strip())
+
+        self.chat_radius = max(0.0, min(100000.0, float(chat_radius)))
+        raw_radius = read_text(self.chat_radius_path).strip()
+        if raw_radius:
+            try:
+                self.chat_radius = max(0.0, min(100000.0, float(raw_radius)))
+            except ValueError:
+                pass
+        self.local_pos = None
+        self.chat_seq = 0
+        self.chat_tx = 0
+        self.chat_rx = 0
+        self.chat_rate = collections.deque()
+        self.seen_chat = collections.OrderedDict()
+        self.last_name_read = 0.0
+        self.last_radius_read = 0.0
+        self.last_chat_log = 0.0
+        self.server_chat_radius = 0.0
 
         # Socket dual-stack (recibe IPv4 e IPv6); si falla, cae a IPv4.
         try:
@@ -384,6 +450,7 @@ class CoopNet:
         self.server_saved_players = 0
         self.server_saved_containers = 0
         self.server_saved_at = 0
+        self.server_chat_radius = 0.0
 
     def set_peer(self, peer, peer_addrs=None, relay_addrs=None):
         changed = (peer != self.peer)
@@ -626,6 +693,10 @@ class CoopNet:
             f"rx_event={self.rx_event}",
             f"rx_ack={self.rx_ack}",
             f"rx_hello={self.rx_hello}",
+            f"chat_tx={self.chat_tx}",
+            f"chat_rx={self.chat_rx}",
+            f"chat_radius={self.chat_radius:.0f}",
+            f"server_chat_radius={self.server_chat_radius:.0f}",
         ]
         write_text_atomic(self.status_path, "\n".join(lines) + "\n")
 
@@ -644,6 +715,163 @@ class CoopNet:
             log("peer configurado, esperando respuesta...")
         elif state == "no_peer":
             log("sin peer configurado (escuchando igual)")
+
+    def refresh_client_name(self, now):
+        """Nombre visible editable con lc_player_name.txt / lc_name."""
+        if not self.allow_name_file or now - self.last_name_read < 1.0:
+            return
+        self.last_name_read = now
+        raw = sanitize_name(read_text(self.player_name_path).strip())
+        if raw and raw != self.client_name:
+            self.client_name = raw
+            log(f"nombre de cliente: {raw}")
+
+    def refresh_chat_radius(self, now):
+        """Radio local escrito por el mod (solo se usa fuera de modo servidor)."""
+        if now - self.last_radius_read < 1.0:
+            return
+        self.last_radius_read = now
+        raw = read_text(self.chat_radius_path).strip()
+        if not raw:
+            return
+        try:
+            radius = max(0.0, min(100000.0, float(raw)))
+        except ValueError:
+            return
+        if abs(radius - self.chat_radius) >= 0.5:
+            self.chat_radius = radius
+            log(f"radio de chat local: {radius:.0f}")
+
+    def local_position(self):
+        if self.local_pos is not None:
+            return self.local_pos
+        parsed = parse_coords(read_text(self.coords_out))
+        if parsed is not None:
+            return parsed[0], parsed[1], parsed[2]
+        return None
+
+    def chat_local_ok(self, area, x, y, z):
+        """Filtro de proximidad en P2P/relay; en modo servidor filtra el server."""
+        if self.server_mode:
+            return True
+        if (self.local_area not in ("", "?")
+                and area not in ("", "?")
+                and area != self.local_area):
+            return False
+        pos = self.local_position()
+        if pos is None:
+            return True
+        if x == 0.0 and y == 0.0 and z == 0.0:
+            return True
+        dx = pos[0] - x
+        dy = pos[1] - y
+        dz = pos[2] - z
+        return (dx * dx + dy * dy + dz * dz) <= (self.chat_radius * self.chat_radius)
+
+    def send_chat(self, scope, text, ts=None, now=None):
+        now = time.time() if now is None else now
+        text = sanitize_chat(text)
+        if not text:
+            return False
+        while self.chat_rate and now - self.chat_rate[0] > CHAT_RATE_WINDOW:
+            self.chat_rate.popleft()
+        if len(self.chat_rate) >= CHAT_RATE_MAX:
+            log("chat: limite de frecuencia local")
+            return False
+        self.chat_rate.append(now)
+        self.chat_seq += 1
+        x, y, z = self.local_position() or (0.0, 0.0, 0.0)
+        msg = {
+            "v": 1,
+            "scope": scope,
+            "id": self.client_id,
+            "name": self.client_name,
+            "area": self.local_area or "?",
+            "x": x,
+            "y": y,
+            "z": z,
+            "text": text,
+            "ts": int(ts or now),
+            "msg_id": f"{self.client_id}:{self.chat_seq}",
+        }
+        data = bytes([PKT_CHAT]) + json.dumps(
+            msg, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if not self.send(data):
+            log("chat: sin destino (peer/servidor no configurado)")
+            return False
+        self.chat_tx += 1
+        log(f"chat[{scope}] enviado: {text[:80]}")
+        return True
+
+    def process_chat_out(self, now):
+        raw = read_text(self.chat_out)
+        if not raw:
+            return
+        truncate(self.chat_out)
+        for line in raw.splitlines()[:50]:
+            parsed = parse_chat_out(line)
+            if parsed is None:
+                continue
+            scope, ts, text = parsed
+            if now - ts > CHAT_STALE_SECONDS or ts - now > 3600:
+                log(f"chat descartado (viejo, {int(now - ts)}s): {text[:60]}")
+                continue
+            self.send_chat(scope, text, ts, now)
+
+    def handle_chat(self, data, now):
+        try:
+            msg = json.loads(data[1:].decode("utf-8", "ignore"))
+        except Exception:
+            return
+        if not isinstance(msg, dict):
+            return
+        sid = str(msg.get("id") or "")[:32]
+        if not sid or sid == self.client_id:
+            return
+        text = sanitize_chat(str(msg.get("text") or ""))
+        if not text:
+            return
+        scope = clean_scope(msg.get("scope"))
+        msg_id = str(msg.get("msg_id") or "")[:64]
+        if not msg_id:
+            msg_id = f"{sid}:{msg.get('ts', 0)}"
+        if msg_id in self.seen_chat:
+            return
+        self.seen_chat[msg_id] = now
+        while len(self.seen_chat) > 200:
+            self.seen_chat.popitem(last=False)
+
+        try:
+            area = clean_area(str(msg.get("area") or "?"))
+            x = float(msg.get("x", 0.0) or 0.0)
+            y = float(msg.get("y", 0.0) or 0.0)
+            z = float(msg.get("z", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            area, x, y, z = "?", 0.0, 0.0, 0.0
+        if scope == "local" and not self.chat_local_ok(area, x, y, z):
+            if now - self.last_chat_log >= 2:
+                self.last_chat_log = now
+                log(f"chat local descartado (area/radio): {sid} area={area}")
+            return
+
+        name = sanitize_name(str(msg.get("name") or "peer"))
+        try:
+            ts = int(msg.get("ts") or now)
+        except (TypeError, ValueError):
+            ts = int(now)
+        if abs(ts - now) > 3600:
+            ts = int(now)
+        line = "\t".join([
+            scope, str(ts), name, area,
+            f"{x:.1f}", f"{y:.1f}", f"{z:.1f}", text,
+        ])
+        try:
+            with open(self.chat_in, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except OSError:
+            return
+        self.chat_rx += 1
+        log(f"chat[{scope}] {name}: {text[:80]}")
 
     def _append_event(self, text):
         try:
@@ -664,6 +892,10 @@ class CoopNet:
         self.server_saved_at = int(st.get("saved_at") or 0)
         self.server_saved_players = int(st.get("saved_players") or 0)
         self.server_saved_containers = int(st.get("saved_containers") or 0)
+        try:
+            self.server_chat_radius = float(st.get("chat_radius") or 0.0)
+        except (TypeError, ValueError):
+            self.server_chat_radius = 0.0
         players = st.get("players") or []
         self.server_players = len(players)
         try:
@@ -796,6 +1028,8 @@ class CoopNet:
                     except OSError:
                         pass
                     log(f"evento recibido: {text}")
+            elif kind == PKT_CHAT:
+                self.handle_chat(data, now)
             elif kind == PKT_STATE:
                 self.handle_server_state(data, now)
             elif kind == PKT_HELLO:
@@ -835,6 +1069,8 @@ class CoopNet:
             self.refresh_peer()
 
             now = time.time()
+            self.refresh_client_name(now)
+            self.refresh_chat_radius(now)
             if now - self.last_area_read >= 1.0:
                 self.last_area_read = now
                 area = clean_area(read_text(self.area_path).strip())
@@ -886,6 +1122,7 @@ class CoopNet:
             parsed = parse_coords(read_text(self.coords_out))
             if parsed is not None:
                 x, y, z, yaw, seq = parsed
+                self.local_pos = (x, y, z)
                 area = self.local_area or "?"
                 if self.server_mode:
                     ab = area.encode("utf-8")[:40]
@@ -895,6 +1132,8 @@ class CoopNet:
                     pkt = POS.pack(PKT_POS, x, y, z, yaw, seq & 0xFFFFFFFF)
                 if self.send_all(pkt):
                     self.tx_pos += 1
+
+            self.process_chat_out(now)
 
             events = read_text(self.event_out)
             if events:
@@ -913,7 +1152,8 @@ class CoopNet:
         log(f"escuchando en :{self.listen_port} (IPv4+IPv6) | "
             f"cliente={self.client_name} ({self.client_id})")
         log(f"IPs locales: {', '.join(sorted(self.local_ips)[:8])}")
-        log(f"área local inicial: {self.local_area}")
+        log(f"área local inicial: {self.local_area} | "
+            f"chat_radius={self.chat_radius:.0f}")
         if self.peer:
             if str(self.peer).startswith("server:"):
                 log(f"servidor dedicado: {self.peer}")
@@ -1010,7 +1250,9 @@ def main():
     ap.add_argument("--server", default=None, metavar="HOST:PUERTO",
                     help="servidor dedicado de coordinación (atajo de --peer server:...)")
     ap.add_argument("--client-name", default=None,
-                    help="nombre visible de este cliente (default: hostname)")
+                    help="nombre visible de este cliente (default: hostname o lc_player_name.txt)")
+    ap.add_argument("--chat-radius", type=float, default=DEFAULT_CHAT_RADIUS,
+                    help="radio del chat local en unidades UE (default 2500; lc_chat_radius.txt lo pisa)")
     ap.add_argument("--port", type=int, default=27015, help="puerto UDP (default 27015)")
     ap.add_argument("--listen-port", type=int, default=None,
                     help="puerto UDP local (default: igual a --port)")
@@ -1049,7 +1291,8 @@ def main():
 
     CoopNet(args.peer, args.port, args.listen_port or args.port,
             directory, args.rate, args.peer_file, args.watch_game,
-            client_name=args.client_name).run()
+            client_name=args.client_name,
+            chat_radius=args.chat_radius).run()
 
 
 if __name__ == "__main__":

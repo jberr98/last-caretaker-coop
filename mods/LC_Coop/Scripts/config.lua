@@ -10,6 +10,8 @@ return {
     areaOut   = "area_out.txt",    -- área/dimensión actual (para el servidor)
     eventOut  = "event_out.txt",
     eventIn   = "event_in.txt",
+    chatOut   = "chat_out.txt",    -- vos -> sidecar (mensajes que enviás)
+    chatIn    = "chat_in.txt",     -- sidecar -> vos (mensajes recibidos)
 
     -- Ajustes de sincronización
     intervalMs   = 50,    -- cada cuánto corre el loop (50 ms = 20 Hz)
@@ -33,6 +35,18 @@ return {
     -- Aplicar snapshots de contenedores del servidor (experimental; puede
     -- limpiar/duplicar ítems si los mundos no coinciden).
     syncContainers = false,
+
+    -- Chat de proximidad (LOCAL) y global (GLOBAL).
+    -- Entrar: Enter = local, Ctrl+Enter = global. Tab cambia de canal.
+    -- El LOCAL solo llega a jugadores de la misma área/dimensión y dentro de
+    -- chatRadius. 1 unidad UE = 1 cm, así que 2500 = 25 m.
+    chatEnabled = true,
+    chatRadius = 2500,
+    chatMaxLen = 240,
+    chatToastSeconds = 8,
+    -- Nombre visible en el chat. Vacío = hostname del sidecar.
+    -- También se puede cambiar en caliente con: lc_name <nombre>
+    playerName = "",
 
     -- Log detallado de toda mutación de inventario (diagnóstico Fase 3).
     debugInventory = false,

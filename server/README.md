@@ -20,7 +20,7 @@ Hay dos modos, no intercambiables:
 ### Binario standalone (Linux x86_64)
 
 Está en `server/bin/lc-coop-server-linux-x86_64` (Rust + musl, **estático**,
-~661 KB). No necesita Python, Docker ni glibc:
+~701 KB). No necesita Python, Docker ni glibc:
 
 ```bash
 scp server/bin/lc-coop-server-linux-x86_64 usuario@servidor:/opt/lc-coop/
@@ -39,13 +39,14 @@ Opciones:
 --timeout S         segundos sin actividad para expirar cliente (default 30)
 --state-hz N        frecuencia de STATE a los clientes (default 15)
 --save-interval S   cada cuántos segundos guardar (default 1)
+--chat-radius N     radio del chat local en unidades UE (default 2500)
 --name STR          nombre visible del servidor
 --dump-save         imprime el save y sale
 -h, --help / -V, --version
 ```
 
 Variables de entorno equivalentes: `PORT`, `SAVE`, `TIMEOUT`, `STATE_HZ`,
-`SAVE_INTERVAL`, `NAME`.
+`SAVE_INTERVAL`, `CHAT_RADIUS`, `NAME`.
 
 ### systemd
 
@@ -128,6 +129,9 @@ El servidor guarda, como mínimo, **posiciones**, y además **puertas** y
   **experimental** (`syncContainers = true`): limpia y vuelve a agregar ítems del
   contenedor; desactivado por defecto para no tocar inventarios ajenos.
 - **Puertas**: último estado por nombre; se aplica a los clientes que entran.
+- **Chat**: no se guarda. El servidor filtra LOCAL por área + radio
+  (`--chat-radius`) y GLOBAL llega a todos; el historial se pierde al
+  reiniciar.
 - Esto **no es un save del juego**: no guarda el mundo completo, máquinas,
   fluidos, misiones ni el inventario del jugador. Solo lo que el mod sincroniza.
 
