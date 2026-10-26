@@ -37,7 +37,7 @@ Opciones:
 --port N            UDP (default: env PORT o 27020)
 --save PATH         JSON de estado (default: env SAVE o lc-coop-server-save.json)
 --timeout S         segundos sin actividad para expirar cliente (default 30)
---state-hz N        frecuencia de STATE a los clientes (default 15)
+--state-hz N        frecuencia de STATE a los clientes (default 60)
 --save-interval S   cada cuántos segundos guardar (default 1)
 --chat-radius N     radio del chat local en unidades UE (default 2500)
 --name STR          nombre visible del servidor

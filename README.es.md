@@ -175,7 +175,7 @@ comando de auto-lanzamiento de Linux.
 Usá el instalador del paquete:
 
 1. Descargá/extraé el paquete `LC_Coop-v<version>.zip` (el script de empaquetado
-   lo deja en `dist/`, por ejemplo `dist/LC_Coop-v0.2.1.zip`).
+   lo deja en `dist/`, por ejemplo `dist/LC_Coop-v0.2.2.zip`).
 2. Ejecutá `INSTALAR.bat` (o `windows/install_lc_coop.ps1`).
 3. Lanzá el juego.
 
@@ -187,12 +187,13 @@ El paquete incluye además el sidecar Python, los binarios del servidor Rust y
 el egg de Pelican.
 
 > **Windows + servidor dedicado (`server:host:puerto`):** el sidecar PowerShell
-> solo implementa P2P/relay. Para el modo servidor y el chat, instalá Python 3,
-> poné `autoStartSidecar = false` en
+> solo implementa P2P/relay. Si Python 3 está en el `PATH`, el
+> `run_sidecar_auto.bat` del paquete arranca el sidecar Python solo al abrir el
+> juego (modo servidor + chat, sin terminal). Si no, cae a PowerShell (solo
+> P2P/relay). Para diagnosticar a mano, poné `autoStartSidecar = false` en
 > `...\ue4ss\Mods\LC_Coop\Scripts\config.lua` y ejecutá
-> `sidecar\run_sidecar_server.bat "C:\...\Voyage\Binaries\Win64"`. El
-> instalador copia `coop_net.py` y el lanzador a la carpeta del juego. Después
-> usá F9 con `server:host:puerto`.
+> `sidecar\run_sidecar_server.bat "C:\...\Voyage\Binaries\Win64"`. Usá F9
+> una vez con `server:host:puerto`; después `lc_peer.txt` lo recuerda.
 
 ## Inicio rápido
 
@@ -430,9 +431,11 @@ Editá `mods/LC_Coop/Scripts/config.lua` (o la copia instalada en
 
 | Clave | Default | Para qué |
 |---|---|---|
-| `intervalMs` | `50` | Intervalo del loop (20 Hz). |
+| `intervalMs` | `16` | Intervalo del loop (~60 Hz). |
 | `interp` | `0.35` | Suavizado de interpolación del ghost (0..1). |
 | `spawnZOffset` | `50` | Eleva el ghost para que no se hunda en el piso. |
+| `ghostMovementMode` | `1` | Modo de movimiento: `0` None, `1` Walking (pose idle, sin gravedad). |
+| `syncFlashlight` | `true` | Copiar la linterna/luces del pawn local al ghost (best effort). |
 | `syncDoors` | `true` | Sincronizar puertas (`false` = solo movimiento). |
 | `saveContainers` | `true` | Reportar snapshots de contenedores al servidor. |
 | `syncContainers` | `false` | Aplicar snapshots de contenedores del servidor en el cliente (experimental). |
@@ -488,7 +491,7 @@ Opciones:
 --port N            puerto UDP (default: env PORT o 27020)
 --save PATH         archivo JSON de estado (default: env SAVE o lc-coop-server-save.json)
 --timeout S         segundos sin actividad para expirar un cliente (default: 30)
---state-hz N        frecuencia de STATE a los clientes (default: 15)
+--state-hz N        frecuencia de STATE a los clientes (default: 60)
 --save-interval S   segundos entre guardados si hubo cambios (default: 1)
 --chat-radius N     radio del chat local en unidades UE (default: 2500)
 --name STR          nombre visible del servidor
@@ -646,6 +649,22 @@ distribuido.
 - El chat de proximidad es **por distancia**, no por oclusión: una pared no
   bloquea el mensaje si ambos están dentro del radio. Es solo texto, no tiene
   historial al cerrar el juego y no está cifrado (UDP plano).
+- El mod es una **capa de espejo/coordinación**, no un servidor del mundo. Cada
+  jugador corre su propio `VoyageWorld2`; ítems, enemigos, barco, IA, física,
+  misiones y save del mundo son locales. Solo se comparten los espejos
+  implementados.
+- **Duplicar ítems del mundo es esperable**: agarrar un ítem en un mundo no
+  destruye el mismo actor en el otro. Los snapshots de contenedores
+  (`syncContainers`) solo cubren inventarios de contenedores y son
+  experimentales.
+- El **barco** no se puede compartir como base móvil con esta arquitectura. Un
+  clon de transform sería un actor separado, sin el mismo inventario, interior,
+  colisión ni jugadores parados arriba. Compartirlo de verdad requiere un
+  servidor autoritativo del mundo; el build retail no tiene `VoyageServer`.
+- **Los enemigos no están sincronizados.** Espejar sus transforms igual
+  divergiría porque cada cliente corre su propia simulación de IA/física.
+- La sincronización de linterna es **best effort**: copia componentes de luz del
+  pawn local al ghost. Usá `lc_lights` en la consola para inspeccionarlos.
 - El modo servidor en Windows requiere el sidecar Python; el sidecar PowerShell
   solo implementa P2P/relay.
 - El juego retail no tiene `VoyageServer`; un servidor real del mundo queda
@@ -665,8 +684,9 @@ distribuido.
 6. Probar visualmente el menú F9 en Windows.
 7. Importar el egg de Pelican en un panel real y verificar
    instalación/arranque/save tras una reinstalación.
-8. Largo plazo: evaluar un transporte en C++ (ver `PLAN.md`) y si un servidor
-   real del mundo es factible.
+8. Evaluar el espejo de actores seleccionados (transform del barco, pickups por
+   ID persistente) y si un servidor real del mundo es factible; el sync completo
+   de objetos, enemigos y barco queda fuera del diseño actual Lua/sidecar.
 
 ## Créditos
 

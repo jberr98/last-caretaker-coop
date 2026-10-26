@@ -14,9 +14,14 @@ return {
     chatIn    = "chat_in.txt",     -- sidecar -> vos (mensajes recibidos)
 
     -- Ajustes de sincronización
-    intervalMs   = 50,    -- cada cuánto corre el loop (50 ms = 20 Hz)
+    intervalMs   = 16,    -- cada cuánto corre el loop (16 ms = ~60 Hz)
     interp       = 0.35,  -- 0..1 suavizado del ghost
     spawnZOffset = 50.0,  -- elevar el ghost para evitar que se hunda
+    -- Modo de movimiento del ghost: 0 = None, 1 = Walking. Con gravedad 0,
+    -- Walking suele mostrar idle en vez de la pose de caída.
+    ghostMovementMode = 1,
+    -- Copiar las luces (linterna) del pawn local al ghost.
+    syncFlashlight = true,
 
     -- Logging
     verbose = true,
@@ -63,7 +68,7 @@ return {
     -- copiás el mod a mano, editá esta línea con tus rutas absolutas.
     sidecarCmdLinux = 'start /unix /bin/sh __LC_COOP_PROJECT__/scripts/launch_sidecar.sh __LC_COOP_GAME_BIN__',
     -- Comando para Windows nativo (el .ps1 debe estar en la carpeta del juego):
-    sidecarCmdWindows = 'start "" /b powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File coop_net.ps1 -WatchGame -Dir "%CD%"',
+    sidecarCmdWindows = 'start "" /b cmd /c run_sidecar_auto.bat "%CD%"',
 
     -- Reconocimiento de clases (temporal, para Fase 3: inventario).
     recon = false,

@@ -104,7 +104,7 @@ egg.
 | `LC_COOP_BINARY_URL` | vacío | URL opcional de un binario ya compilado |
 | `SAVE_FILE` | `save.json` | Ruta del save, relativa a `/home/container` |
 | `TIMEOUT` | `30` | Segundos sin actividad para expirar un cliente |
-| `STATE_HZ` | `15` | Frecuencia del STATE a los clientes |
+| `STATE_HZ` | `60` | Frecuencia del STATE a los clientes |
 | `SAVE_INTERVAL` | `1` | Cada cuántos segundos guardar si hubo cambios |
 | `CHAT_RADIUS` | `2500` | Radio del chat local en unidades UE (2500 = 25 m) |
 | `EXTRA_ARGS` | vacío | Argumentos extra para `lc-coop-server` |

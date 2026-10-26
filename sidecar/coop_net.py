@@ -284,8 +284,16 @@ def local_ips():
 
 def game_running():
     """¿Está corriendo el juego? (para que el sidecar salga cuando se cierra)."""
+    if os.name == "nt":
+        try:
+            out = subprocess.check_output(
+                ["tasklist", "/FI", "IMAGENAME eq VoyageSteam-Win64-Shipping.exe"],
+                text=True, timeout=3, stderr=subprocess.DEVNULL)
+            return "VoyageSteam-Win64-Shipping.exe" in out
+        except Exception:
+            return True
     if not os.path.isdir("/proc"):
-        return True  # no es Linux: no podemos chequear
+        return True  # no es Linux ni Windows: no podemos chequear
     try:
         for pid in os.listdir("/proc"):
             if not pid.isdigit():
@@ -1257,7 +1265,7 @@ def main():
     ap.add_argument("--listen-port", type=int, default=None,
                     help="puerto UDP local (default: igual a --port)")
     ap.add_argument("--dir", default=None, help="carpeta Binaries/Win64 del juego")
-    ap.add_argument("--rate", type=int, default=30, help="paquetes por segundo (default 30)")
+    ap.add_argument("--rate", type=int, default=60, help="paquetes por segundo (default 60)")
     ap.add_argument("--watch-game", action="store_true",
                     help="salir automáticamente cuando se cierre el juego")
     ap.add_argument("--probe", default=None, metavar="HOST",

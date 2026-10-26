@@ -76,6 +76,7 @@ local ghostClass = nil
 local spawnFailAt = 0
 local lastRemote = nil
 local lastMoveLogAt = 0
+local lastLightSyncAt = 0
 local peerSim = false
 local peerSimAngle = 0
 local connectUI = nil
@@ -332,7 +333,12 @@ local function harden_ghost(g)
         local mv = g["CharacterMovement"]
         if mv then
             mv.GravityScale = 0
-            pcall(function() mv:SetMovementMode(0) end) -- MOVE_None
+            pcall(function() mv:StopMovementImmediately() end)
+            local mode = tonumber(config.ghostMovementMode)
+            if mode == nil then mode = 1 end
+            -- 0=MOVE_None, 1=MOVE_Walking. Walking + gravedad 0 evita la
+            -- pose de caída en muchos personajes.
+            pcall(function() mv:SetMovementMode(mode) end)
         end
     end)
     pcall(function()
@@ -342,6 +348,64 @@ local function harden_ghost(g)
             pcall(function() comp:SetActive(false) end)
         end
     end)
+end
+
+-- Copia las luces del pawn local (linterna) al ghost. Es best-effort: si la
+-- linterna es un actor separado, el ghost puede no tener el componente.
+local lightClass = nil
+
+local function get_lights(actor)
+    local out = {}
+    if not actor or not actor:IsValid() then return out end
+    if not lightClass then
+        lightClass = StaticFindObject("/Script/Engine.LightComponent")
+    end
+    if not lightClass then return out end
+    pcall(function()
+        for _, c in pairs(actor:K2_GetComponentsByClass(lightClass) or {}) do
+            if c and c:IsValid() then out[#out + 1] = c end
+        end
+    end)
+    return out
+end
+
+local function copy_light(src, dst)
+    if not src or not dst then return end
+    local vis = false
+    pcall(function() vis = src:IsVisible() end)
+    pcall(function() dst:SetVisibility(vis) end)
+    pcall(function() dst:SetIntensity(src.Intensity) end)
+    pcall(function() dst:SetLightColor(src.LightColor) end)
+    pcall(function() dst:SetAttenuationRadius(src.AttenuationRadius) end)
+    pcall(function() dst:SetInnerConeAngle(src.InnerConeAngle) end)
+    pcall(function() dst:SetOuterConeAngle(src.OuterConeAngle) end)
+    pcall(function() dst:SetTemperature(src.Temperature) end)
+    pcall(function() dst:SetUseTemperature(src.bUseTemperature) end)
+    pcall(function() dst:SetVolumetricScatteringIntensity(src.VolumetricScatteringIntensity) end)
+    pcall(function() dst:SetCastShadows(src.CastShadows) end)
+    pcall(function() dst:SetSourceRadius(src.SourceRadius) end)
+    pcall(function() dst:SetSoftSourceRadius(src.SoftSourceRadius) end)
+end
+
+local function sync_flashlight()
+    if config.syncFlashlight == false then return end
+    if not ghost or not ghost:IsValid() then return end
+    local PC = UEHelpers.GetPlayerController()
+    local pawn = PC and PC.Pawn
+    if not pawn or not pawn:IsValid() then return end
+    local src = get_lights(pawn)
+    if #src == 0 then return end
+    local dstByName = {}
+    for _, c in ipairs(get_lights(ghost)) do
+        local n = nil
+        pcall(function() n = c:GetFName():ToString() end)
+        if n then dstByName[n] = c end
+    end
+    for _, l in ipairs(src) do
+        local n = nil
+        pcall(function() n = l:GetFName():ToString() end)
+        if n and dstByName[n] then copy_light(l, dstByName[n]) end
+    end
 end
 
 local function applyRemote(remote)
@@ -505,6 +569,10 @@ LoopAsync(config.intervalMs, function()
             }
         end
         if lastRemote then applyRemote(lastRemote) end
+        if now() - lastLightSyncAt >= 0.5 then
+            lastLightSyncAt = now()
+            pcall(sync_flashlight)
+        end
         debugLog.set("ghost", (ghost and ghost:IsValid()) and "OK" or "NO")
         if lastRemote then
             debugLog.set("remote", string.format("%.1f,%.1f,%.1f",
@@ -901,6 +969,32 @@ pcall(function()
         return true
     end)
 
+    RegisterConsoleCommandHandler("lc_lights", function(cmd, params, ar)
+        local PC = UEHelpers.GetPlayerController()
+        local function dump(label, actor)
+            if not actor or not actor:IsValid() then
+                log(label .. ": sin actor")
+                return
+            end
+            local cls = StaticFindObject("/Script/Engine.LightComponent")
+            local n = 0
+            for _, c in pairs(actor:K2_GetComponentsByClass(cls) or {}) do
+                n = n + 1
+                local name, cname, intensity, vis = "?", "?", -1, false
+                pcall(function() name = c:GetFName():ToString() end)
+                pcall(function() cname = c:GetClass():GetFullName() end)
+                pcall(function() intensity = c.Intensity end)
+                pcall(function() vis = c:IsVisible() end)
+                log(string.format("%s luz %d: %s (%s) intensity=%s visible=%s",
+                    label, n, name, cname, tostring(intensity), tostring(vis)))
+            end
+            log(label .. ": luces=" .. n)
+        end
+        dump("local", PC and PC.Pawn)
+        dump("ghost", ghost)
+        return true
+    end)
+
     RegisterConsoleCommandHandler("lc_name", function(cmd, params, ar)
         local name = table.concat(params or {}, " ")
         name = name:gsub("[;\r\n\t]", " ")
@@ -919,7 +1013,7 @@ pcall(function()
         end
         return true
     end)
-    log("comandos in-game: lc_connect <IP> | lc_disconnect | lc_status | lc_name <nombre>")
+    log("comandos in-game: lc_connect <IP> | lc_disconnect | lc_status | lc_name <nombre> | lc_lights")
 end)
 
 -- =====================================================================

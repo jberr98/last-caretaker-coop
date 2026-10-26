@@ -48,7 +48,9 @@ dedicado (y para el chat) usa el sidecar Python:
   1. Instala Python 3 desde https://www.python.org/downloads/windows/
      y marca "Add Python to PATH".
   2. Cierra el juego.
-  3. En ...\ue4ss\Mods\LC_Coop\Scripts\config.lua pone:
+  3. El mod ya arranca el sidecar solo al abrir el juego. Si Python esta en
+     PATH usa Python; si no, PowerShell. Para forzar el Python a mano, en
+     ...\ue4ss\Mods\LC_Coop\Scripts\config.lua pone:
          autoStartSidecar = false
   4. Abri cmd en la carpeta del juego y corre:
          run_sidecar_server.bat

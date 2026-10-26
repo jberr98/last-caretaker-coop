@@ -198,7 +198,7 @@ def build_egg(install_script: str) -> dict:
                     "los clientes."
                 ),
                 "env_variable": "STATE_HZ",
-                "default_value": "15",
+                "default_value": "60",
                 "user_viewable": True,
                 "user_editable": True,
                 "rules": ["required", "integer", "between:1,60"],

@@ -111,10 +111,15 @@ if (Test-Path (Join-Path $sidecarDir "coop_net.ps1")) {
 # El modo servidor (server:host:puerto) y el chat necesitan el sidecar Python.
 if (Test-Path (Join-Path $sidecarDir "coop_net.py")) {
     Copy-Item -Force (Join-Path $sidecarDir "coop_net.py") $GameBin
-    if (Test-Path (Join-Path $sidecarDir "run_sidecar_server.bat")) {
-        Copy-Item -Force (Join-Path $sidecarDir "run_sidecar_server.bat") $GameBin
+    foreach ($bat in @("run_sidecar_server.bat", "run_sidecar_auto.bat")) {
+        if (Test-Path (Join-Path $sidecarDir $bat)) {
+            Copy-Item -Force (Join-Path $sidecarDir $bat) $GameBin
+        }
     }
-    Write-Host "Sidecar Python + run_sidecar_server.bat copiados a: $GameBin"
+    Write-Host "Sidecar Python + lanzadores copiados a: $GameBin"
+}
+if (-not (Get-Command python -ErrorAction SilentlyContinue) -and -not (Get-Command py -ErrorAction SilentlyContinue)) {
+    Write-Host "AVISO: Python 3 no encontrado. P2P usara PowerShell; server: y chat requieren Python."
 }
 
 # --- Habilitar en mods.txt ---

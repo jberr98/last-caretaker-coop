@@ -279,7 +279,7 @@ fn usage(program: &str) {
     println!("  --port N            UDP (default: env PORT o 27020)");
     println!("  --save PATH         JSON de estado (default: env SAVE o lc-coop-server-save.json)");
     println!("  --timeout S         segundos sin actividad para expirar cliente (default: 30)");
-    println!("  --state-hz N        frecuencia de STATE (default: 15)");
+    println!("  --state-hz N        frecuencia de STATE (default: 60)");
     println!("  --save-interval S   cada cuántos segundos guardar (default: 1)");
     println!("  --name STR          nombre visible del servidor (default: {})", "LC_Coop Server");
     println!("  --chat-radius N     radio del chat local en unidades UE (default: 2500)");
@@ -309,7 +309,7 @@ fn parse_args() -> Config {
         env::var("SAVE").unwrap_or_else(|_| "lc-coop-server-save.json".to_string()),
     );
     let mut timeout_secs = clamp_env_u64("TIMEOUT", 30, 5, 3600);
-    let mut state_hz = clamp_env_u64("STATE_HZ", 15, 1, 60);
+    let mut state_hz = clamp_env_u64("STATE_HZ", 60, 1, 60);
     let mut save_interval_secs = clamp_env_u64("SAVE_INTERVAL", 1, 1, 60);
     let mut name = env::var("NAME").unwrap_or_else(|_| "LC_Coop Server".to_string());
     let mut chat_radius = env::var("CHAT_RADIUS")
