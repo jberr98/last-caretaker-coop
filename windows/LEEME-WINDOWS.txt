@@ -1,0 +1,55 @@
+========================================================
+  LC_Coop — Instalación en WINDOWS (2ª máquina)
+========================================================
+
+QUÉ ES
+  Mod de cooperativo para The Last Caretaker. Cada jugador ve
+  al otro (ghost). Requiere UE4SS + este mod + el sidecar.
+  NO requiere instalar Python: el sidecar es un script de
+  PowerShell (ya viene en Windows).
+
+--------------------------------------------------------
+PASO 1 — UE4SS
+--------------------------------------------------------
+  1. Descargá UE4SS: https://www.nexusmods.com/thelastcaretaker/mods/4
+  2. Extraé su contenido en:
+       ...\Voyage\Binaries\Win64\
+     (ahí deben quedar dwmapi.dll y la carpeta ue4ss\)
+  3. En   ...\ue4ss\UE4SS-settings.ini   sección [Debug],
+     poné en 0:  ConsoleEnabled, GuiConsoleEnabled, GuiConsoleVisible
+
+--------------------------------------------------------
+PASO 2 — Instalar el mod (automático)
+--------------------------------------------------------
+  Descomprimí este paquete y, en una consola (cmd), corré:
+
+     windows\install_lc_coop.bat "C:\...\Voyage\Binaries\Win64"
+
+  (Si no le pasás la ruta, intenta detectarla sola.)
+  Eso copia el mod y lo habilita en mods.txt / mods.json.
+
+--------------------------------------------------------
+PASO 3 — Jugar
+--------------------------------------------------------
+  El sidecar se lanza SOLO al entrar al juego (no hace falta terminal).
+  1. Lanzá The Last Caretaker.
+  2. En el juego: apretá F9, escribí la IP DEL OTRO JUGADOR
+     (Tailscale 100.x.y.z o LAN), y hacé clic en "Conectar".
+  3. F9 cierra el menú.
+  (Si no conectara, corré a mano: sidecar\run_sidecar.bat "<carpeta Win64>")
+
+--------------------------------------------------------
+QUÉ ESPERAR
+--------------------------------------------------------
+  - Cada jugador ve al otro (ghost) moverse en su mundo.
+  - Puertas: probá abrir la misma puerta en los dos.
+  - El inventario/contenedores está EN PAUSA (no sincroniza).
+
+--------------------------------------------------------
+PROBLEMAS COMUNES
+--------------------------------------------------------
+  - "no existe ue4ss\"  -> no instalaste UE4SS (Paso 1).
+  - No conecta          -> ¿el sidecar está corriendo en AMBAS PCs?
+                           ¿escribiste la IP de la OTRA máquina?
+  - Firewall            -> permitir UDP 27015 (si no usás Tailscale).
+  - ¿Apuntar a tu propia IP? = auto-test (verás un clon que te copia).

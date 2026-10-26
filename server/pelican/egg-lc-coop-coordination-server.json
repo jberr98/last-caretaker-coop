@@ -1,0 +1,138 @@
+{
+    "_comment": "Egg generado por server/pelican/generate_egg.py. No editar a mano: cambiá el generador y regenerá.",
+    "meta": {
+        "version": "PLCN_v1",
+        "update_url": "https://raw.githubusercontent.com/jberr98/last-caretaker-coop/main/server/pelican/egg-lc-coop-coordination-server.json"
+    },
+    "exported_at": "2026-10-26T05:49:35+00:00",
+    "name": "LC_Coop Coordination Server",
+    "author": "33329664+jberr98@users.noreply.github.com",
+    "uuid": "4f6c1d2a-8b3e-4c7a-9d61-5e2b0a7c9f14",
+    "description": "Servidor dedicado de coordinación para el mod LC_Coop de The Last Caretaker. Guarda posiciones por área/dimensión, puertas y contenedores en un save.json propio, y coordina a los clientes. NO hostea el mundo del juego: cada jugador corre su partida. Los clientes se conectan con server:IP:PUERTO (UDP). La instalación descarga el instalador y la fuente desde github.com/jberr98/last-caretaker-coop y compila el binario Rust. Para usar un binario ya compilado, definí LC_COOP_BINARY_URL. Licencia: GPL-3.0-or-later (copyleft; ver LICENSE en el repositorio).",
+    "tags": [
+        "lc-coop",
+        "the-last-caretaker",
+        "coordination",
+        "rust"
+    ],
+    "features": [],
+    "docker_images": {
+        "Debian 13 (recomendado)": "ghcr.io/pelican-eggs/yolks:debian",
+        "Alpine (binario estático)": "ghcr.io/pelican-eggs/yolks:alpine"
+    },
+    "file_denylist": [],
+    "startup": "./lc-coop-server --port {{SERVER_PORT}} --save {{SAVE_FILE}} --name \"{{SERVER_NAME}}\" --timeout {{TIMEOUT}} --state-hz {{STATE_HZ}} --save-interval {{SAVE_INTERVAL}} {{EXTRA_ARGS}}",
+    "config": {
+        "files": "{}",
+        "startup": "{\n    \"done\": \"escuchando en\"\n}",
+        "logs": "{}",
+        "stop": "^SIGTERM"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# LC_Coop — bootstrap del egg de Pelican.\n# Descarga el instalador versionado en el repositorio y lo ejecuta.\nset -euo pipefail\n\ncd /mnt/server\n\nPREFIX=\"[lc-coop-install]\"\nlog() { echo \"$PREFIX $*\"; }\n\nINSTALL_URL=\"${LC_COOP_INSTALL_URL:-https://raw.githubusercontent.com/jberr98/last-caretaker-coop/main/server/pelican/install.sh}\"\nINSTALL_FILE=\"/tmp/lc-coop-install.sh\"\n\nif ! command -v curl >/dev/null 2>&1; then\n    log \"instalando curl\"\n    apt-get update -qq\n    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends curl ca-certificates\nfi\n\nlog \"descargando instalador: $INSTALL_URL\"\ncurl -fsSL --retry 3 --retry-delay 2 -o \"$INSTALL_FILE\" \"$INSTALL_URL\"\n\nif [ ! -s \"$INSTALL_FILE\" ] || ! head -n 1 \"$INSTALL_FILE\" | grep -q '^#!'; then\n    log \"ERROR: el instalador descargado está vacío o no es un script\"\n    exit 1\nfi\n\nexport DEST=\"${DEST:-/mnt/server}\"\nlog \"ejecutando instalador (DEST=$DEST)\"\nbash \"$INSTALL_FILE\"\n",
+            "container": "rust:slim",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "sort": 1,
+            "name": "Nombre del servidor",
+            "description": "Nombre visible que reciben los clientes del mod (ACK/STATE).",
+            "env_variable": "SERVER_NAME",
+            "default_value": "LC_Coop Server",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": [
+                "required",
+                "string",
+                "max:48",
+                "regex:~^[A-Za-z0-9 _.,:-]+$~"
+            ]
+        },
+        {
+            "sort": 2,
+            "name": "URL de binario (opcional)",
+            "description": "Si la completás, la instalación descarga ese binario Linux ya compilado en vez de compilar desde la fuente. Tiene que ser un ELF para la arquitectura del nodo (x86_64 o arm64). Dejalo vacío para compilar desde el repositorio.",
+            "env_variable": "LC_COOP_BINARY_URL",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": [
+                "string",
+                "max:512"
+            ]
+        },
+        {
+            "sort": 3,
+            "name": "Archivo de save",
+            "description": "Ruta del save JSON, relativa a /home/container. No se borra al reinstalar.",
+            "env_variable": "SAVE_FILE",
+            "default_value": "save.json",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": [
+                "required",
+                "string",
+                "max:96",
+                "regex:~^(?!.*\\.\\.)(?!/)[A-Za-z0-9._/-]+$~"
+            ]
+        },
+        {
+            "sort": 4,
+            "name": "Timeout de clientes",
+            "description": "Segundos sin actividad para marcar a un cliente como desconectado.",
+            "env_variable": "TIMEOUT",
+            "default_value": "30",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": [
+                "required",
+                "integer",
+                "between:5,600"
+            ]
+        },
+        {
+            "sort": 5,
+            "name": "STATE por segundo",
+            "description": "Frecuencia (Hz) con la que el servidor manda el estado a los clientes.",
+            "env_variable": "STATE_HZ",
+            "default_value": "15",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": [
+                "required",
+                "integer",
+                "between:1,60"
+            ]
+        },
+        {
+            "sort": 6,
+            "name": "Intervalo de guardado",
+            "description": "Cada cuántos segundos se escribe el save.json si hubo cambios.",
+            "env_variable": "SAVE_INTERVAL",
+            "default_value": "1",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": [
+                "required",
+                "integer",
+                "between:1,300"
+            ]
+        },
+        {
+            "sort": 7,
+            "name": "Argumentos extra",
+            "description": "Argumentos adicionales para lc-coop-server (opcional).",
+            "env_variable": "EXTRA_ARGS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": [
+                "string",
+                "max:256"
+            ]
+        }
+    ]
+}

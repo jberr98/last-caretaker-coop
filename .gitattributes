@@ -1,0 +1,17 @@
+# Normalize line endings; keep Windows scripts CRLF when checked out.
+* text=auto
+
+*.sh text eol=lf
+*.py text eol=lf
+*.lua text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Prebuilt Linux binaries and packages
+server/bin/* binary
+*.zip binary

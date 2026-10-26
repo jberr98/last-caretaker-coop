@@ -1,0 +1,11 @@
+services:
+  lc-coop-relay:
+    build: .
+    image: lc-coop-relay:latest
+    container_name: lc-coop-relay
+    restart: unless-stopped
+    environment:
+      - PORT=27020
+      - TIMEOUT=30
+    ports:
+      - "27020:27020/udp"

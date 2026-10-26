@@ -1,0 +1,49 @@
+# Local/private notes (see AGENTS.md)
+*.local.md
+PENDIENTE.local.md
+
+# Build artifacts and packages
+*.zip
+server/coop-server-rs/target/
+server/relay-rs/target/
+server/pelican/__pycache__/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Mod/sidecar runtime files and logs
+*.log
+lc_sidecar.log
+lc_sidecar_launch.log
+coords_out.txt
+coords_in.txt
+event_out.txt
+event_in.txt
+area_out.txt
+lc_peer.txt
+lc_client_id.txt
+lc_net_status.txt
+save.json
+save-*.json
+*.bad-*
+.lc-coop-build/
+.lc-coop-build-info
+lc-coop-server.part
+
+# Third-party research clones (not distributed with the mod)
+reference/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

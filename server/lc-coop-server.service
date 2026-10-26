@@ -1,0 +1,20 @@
+[Unit]
+Description=LC_Coop dedicated coordination server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Ajustá la ruta del binario si lo copiás en otro lado.
+ExecStart=/opt/lc-coop/lc-coop-server --port 27020 --save /var/lib/lc-coop/save.json
+Restart=always
+RestartSec=3
+DynamicUser=yes
+StateDirectory=lc-coop
+WorkingDirectory=/var/lib/lc-coop
+# El puerto 27020 es >1024, no necesita root.
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
