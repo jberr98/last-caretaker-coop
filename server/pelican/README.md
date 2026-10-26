@@ -150,6 +150,15 @@ El save queda en `/home/container/save.json` (o en `SAVE_FILE`). Se escribe cada
 - No hace falta abrir nada en los clientes.
 - Funciona por IP LAN, IP pública o Tailscale; el servidor no necesita Tailscale.
 
+## Puerto incorrecto
+
+Si la consola muestra `escuchando en :8766` pero la allocation es
+`[::]:27665`, el proceso recibió un `SERVER_PORT` viejo (pasó al cambiar la
+allocation con el servidor encendido). Paralo, poné la allocation correcta como
+primaria o cambiá `{{SERVER_PORT}}` por el puerto real en **Startup**, guardá y
+reiniciá. El puerto de la consola y la allocation tienen que coincidir; si no,
+el juego manda a un puerto donde no escucha nadie.
+
 ## Limitaciones
 
 - No hostea el mundo del juego: no hay `VoyageServer` en el build.

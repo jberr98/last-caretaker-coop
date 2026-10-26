@@ -576,6 +576,11 @@ https://raw.githubusercontent.com/jberr98/last-caretaker-coop/main/server/pelica
    re-fetches the latest version.
 6. The save lives in `/home/container/save.json` and survives reinstalls.
 
+> **Port mismatch:** if the console says `escuchando en :8766` but the panel
+> allocation is `[::]:27665`, the server received a stale `SERVER_PORT`. Stop
+> it, set `27665` as the primary allocation (or hardcode the port in
+> **Startup**), and restart. The port in the console must match the allocation.
+
 Full guide: [`server/pelican/README.md`](server/pelican/README.md). Regenerate
 the egg after server changes with:
 

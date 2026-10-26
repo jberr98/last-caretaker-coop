@@ -580,6 +580,12 @@ https://raw.githubusercontent.com/jberr98/last-caretaker-coop/main/server/pelica
    vuelve a traer la última versión.
 6. El save queda en `/home/container/save.json` y sobrevive reinstalaciones.
 
+> **Puerto incorrecto:** si la consola dice `escuchando en :8766` pero la
+> allocation del panel es `[::]:27665`, el servidor recibió un `SERVER_PORT`
+> viejo. Paralo, poné `27665` como allocation primaria (o fijá el puerto en
+> **Startup**) y reiniciá. El puerto de la consola debe coincidir con la
+> allocation.
+
 Guía completa: [`server/pelican/README.md`](server/pelican/README.md).
 Regenerá el egg después de cambiar el servidor con:
 
