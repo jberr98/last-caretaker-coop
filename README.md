@@ -20,10 +20,10 @@ This is a personal project, not affiliated with the game's developers. See
 > **Status:** position/ghost sync, door sync, area/dimension isolation, the
 > in-game F9 menu, the Ctrl+F6 debug overlay, the dedicated coordination server
 > with a persistent JSON save, and the relay fallback are working. The Pelican
-> Panel egg is ready to import (its install/runtime components were tested
-> separately). Applying container snapshots on the client (`syncContainers`) is
-> still experimental. Full world co-op is not supported — see
-> [Limitations](#limitations).
+> Panel egg pulls the installer from this repository; the remote bootstrap and
+> runtime were tested. Applying container snapshots on the client
+> (`syncContainers`) is still experimental. Full world co-op is not supported —
+> see [Limitations](#limitations).
 
 ## Table of contents
 

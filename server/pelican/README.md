@@ -175,8 +175,9 @@ egg.
 
 ## Probado
 
-- Bootstrap + tarball local + compilación musl en `rust:slim`.
-- Instalación por `LC_COOP_BINARY_URL` y rechazo de archivos que no son ELF.
+- Bootstrap real desde `raw.githubusercontent.com` + tarball de GitHub +
+  compilación musl en `rust:slim`.
+- Instalación por `LC_COOP_BINARY_URL` usando el binario del repo.
 - Runtime en `ghcr.io/pelican-eggs/yolks:debian` y `:alpine`.
 - Arranque, `HELLO/ACK` con `scripts/check_peer.sh` y guardado al recibir
   SIGTERM.

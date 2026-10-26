@@ -21,10 +21,10 @@ Es un proyecto personal, no está afiliado a los desarrolladores del juego. Ver
 > **Estado:** funcionan la sincronización de posición/ghost, las puertas, el
 > aislamiento por área/dimensión, el menú in-game F9, el overlay de debug
 > Ctrl+F6, el servidor dedicado de coordinación con save JSON persistente y el
-> relay de respaldo. El egg de Pelican Panel está listo para importar (sus
-> componentes de instalación/runtime se probaron por separado). Aplicar
-> snapshots de contenedores en el cliente (`syncContainers`) sigue siendo
-> experimental. El cooperativo completo del mundo no está soportado — ver
+> relay de respaldo. El egg de Pelican Panel descarga el instalador desde este
+> repositorio; el bootstrap remoto y el runtime se probaron. Aplicar snapshots
+> de contenedores en el cliente (`syncContainers`) sigue siendo experimental.
+> El cooperativo completo del mundo no está soportado — ver
 > [Limitaciones](#limitaciones).
 
 ## Índice
